@@ -96,6 +96,39 @@ measurable voiced speech at any threshold and are now reported as not
 assessable rather than dropped silently. The healthy reference clips move by
 under 0.2 s of retained speech (BL02 17.76 s → 17.91 s).
 
+## Corpus-wide outcome
+
+All 296 PVQD ENSS clips, both profiles (`vad_eval/corpus_general.csv`,
+`vad_eval/corpus_health.csv`):
+
+| profile | accepted | rejected | rejection rate |
+|---|---|---|---|
+| general | 289 / 296 | 7 | 2.36% |
+| voice_health | 293 / 296 | 3 | 1.01% |
+
+The general profile's 7 rejections reproduce the n = 289 of the v1 paper
+exactly, which is what validates the harness.
+
+The loosened periodicity gate matters well beyond those 7. Under the general
+profile, 9 of the 289 *scored* clips retained under 2 s of speech and 17 under
+3 s, the worst being LA9021_ENSS: 0.04 s of retained speech, scored 97.21.
+Those clips were scored from zero-filled jitter, shimmer and CPPS. They were
+not short recordings — the periodicity gate was discarding their speech as
+breath. Under the health profile the same clips retain 8.7–13.1 s, and the
+minimum retained speech across all 293 accepted clips is 2.98 s.
+
+The three clips that remain unassessable are all severe: PT008 (severity
+98.67, 0.885 s retained), PT084 (71.17, 0 s) and PT087 (69.50, 0.09 s). PT008
+is the one clip that loses a score it previously had; that score came from
+0.86 s of speech and zero-filled features. A voice with no measurable
+periodic phonation is not an unknown — it is a clinical red flag, and
+"recommend a clinical review" is the correct output for it.
+
+**The 2.0 s floor is not a knife-edge.** On this corpus the rejected clips top
+out at 0.885 s of retained speech and the accepted ones start at 2.98 s, so
+any floor in (0.885, 2.98] produces identical results. 2.0 s sits in the
+middle of that gap.
+
 ## The assessability contract
 
 `pitchee_voice_health_result_t.assessment` and
