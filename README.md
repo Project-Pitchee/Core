@@ -166,9 +166,29 @@ unzip /tmp/onnxruntime-ios.zip -d third_party/onnxruntime-ios
 
 ```bash
 ./build-macos/pitchee_cli ./models /path/to/audio.wav feminization
+./build-macos/pitchee_cli ./models voice-health /path/to/audio.wav
 ```
 
 第三个参数必须显式指定 `feminization` 或 `masculinization`。
+
+嗓音健康分析是独立入口，不出现在主分析 JSON 中：
+
+```c
+pitchee_voice_health_result_t health = {0};
+pitchee_analysis_run_voice_health_wav_file(
+    analyzer,
+    "/path/to/audio.wav",
+    NULL,
+    NULL,
+    &health,
+    error,
+    sizeof(error)
+);
+```
+
+该接口复用 Analyzer 的 VAD、SwiftF0 和 ECAPA。模型头权重直接编译进
+`voice_health_model.hpp`，不增加模型文件。Android 上 VAD、SwiftF0 和 ECAPA
+仍走既有 ncnn 后端，因此不需要额外 ncnn 转换步骤。
 
 macOS 也可以直接从命令行录音并分析。录音使用系统当前的默认输入设备，可在
 “系统设置 → 声音 → 输入”中切换：

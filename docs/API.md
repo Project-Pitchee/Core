@@ -202,6 +202,28 @@ whether a boost or limit was applied.
 
 This function has no ONNX Runtime dependency.
 
+## Voice Health
+
+Voice Health is deliberately separate from the bundled VFP/F0/Naturalness JSON:
+
+```c
+pitchee_voice_health_result_t health = {0};
+pitchee_analysis_run_voice_health_wav_file(
+    analyzer,
+    "voice.wav",
+    NULL,
+    NULL,
+    &health,
+    error,
+    sizeof(error)
+);
+```
+
+For in-memory audio, use `pitchee_analysis_run_voice_health()`. The function
+reuses the analyzer's VAD, SwiftF0 and ECAPA models, then applies the embedded
+Logistic head from `voice_health_model.hpp`. No extra model file is needed.
+Android uses the same ncnn-backed VAD, SwiftF0 and ECAPA path.
+
 ## Spectrum
 
 Spectrum is independent of analyzer creation and ONNX Runtime:

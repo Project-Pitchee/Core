@@ -63,22 +63,28 @@ bool json_number(const std::string& json, const std::string& key, double& value)
 
 int main(int argc, char** argv) {
     const bool record_mode = argc >= 5 && std::strcmp(argv[2], "record") == 0;
-    if ((!record_mode && argc != 4) || (record_mode && argc != 5 && argc != 6)) {
+    const bool voice_health_mode = argc == 4
+        && std::strcmp(argv[2], "voice-health") == 0;
+    if ((!record_mode && !voice_health_mode && argc != 4)
+        || (record_mode && argc != 5 && argc != 6)) {
         std::cerr << "usage: pitchee_cli <model-directory> <audio.wav> "
                      "<feminization|masculinization>\n"
                      "       pitchee_cli <model-directory> record <seconds> "
-                     "<feminization|masculinization> [output.wav]\n";
+                     "<feminization|masculinization> [output.wav]\n"
+                     "       pitchee_cli <model-directory> voice-health <audio.wav>\n";
         return 2;
     }
 
     pitchee_score_profile_t score_profile;
-    const char* profile_argument = record_mode ? argv[4] : argv[3];
-    if (!parse_profile(profile_argument, score_profile)) {
-        std::cerr << "invalid score profile: " << profile_argument << "\n";
-        return 2;
+    if (!voice_health_mode) {
+        const char* profile_argument = record_mode ? argv[4] : argv[3];
+        if (!parse_profile(profile_argument, score_profile)) {
+            std::cerr << "invalid score profile: " << profile_argument << "\n";
+            return 2;
+        }
     }
 
-    std::string audio_path = record_mode ? std::string{} : argv[2];
+    std::string audio_path = record_mode || voice_health_mode ? std::string{} : argv[2];
     if (record_mode) {
         char* duration_end = nullptr;
         const double duration = std::strtod(argv[3], &duration_end);
@@ -154,6 +160,33 @@ int main(int argc, char** argv) {
 
     char* json = nullptr;
     const char* show_progress = std::getenv("PITCHEE_CLI_PROGRESS");
+    if (voice_health_mode) {
+        pitchee_voice_health_result_t health{};
+        status = pitchee_analysis_run_voice_health_wav_file(
+            analyzer,
+            argv[3],
+            show_progress && *show_progress ? progress_callback : nullptr,
+            nullptr,
+            &health,
+            error,
+            sizeof(error)
+        );
+        if (status != PITCHEE_SUCCESS) {
+            std::cerr << "voice-health analysis failed: " << error << "\n";
+            pitchee_analyzer_destroy(analyzer);
+            return static_cast<int>(status);
+        }
+        std::cout << "health_score: " << health.health_score << "\n";
+        std::cout << "disorder_probability: "
+                  << health.disorder_probability * 100.0 << "%\n";
+        std::cout << "decision_threshold: "
+                  << health.decision_threshold * 100.0 << "%\n";
+        std::cout << "label: "
+                  << (health.is_disordered ? "disordered" : "healthy") << "\n";
+        pitchee_analyzer_destroy(analyzer);
+        return 0;
+    }
+
     status = pitchee_analyze_wav_file(
         analyzer,
         audio_path.c_str(),

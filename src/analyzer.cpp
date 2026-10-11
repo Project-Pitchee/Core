@@ -1,6 +1,8 @@
 #include "internal.hpp"
 #include "model_runtime.hpp"
 #include "vad.hpp"
+#include "voice_health.hpp"
+#include "voice_health_model.hpp"
 #include "wav_reader.hpp"
 
 #include "pitchee/pitchee.h"
@@ -603,6 +605,116 @@ pitchee_status_t pitchee_analyzer_detect_vad(
     }
 }
 
+pitchee_status_t run_voice_health_pcm_impl(
+    pitchee_analyzer_t* analyzer,
+    const float* samples,
+    size_t sample_count,
+    int32_t sample_rate,
+    int32_t channels,
+    const ProgressReporter& reporter,
+    pitchee_voice_health_result_t* out_result,
+    char* error_message,
+    size_t error_message_capacity
+) {
+    if (!analyzer || !samples || sample_count == 0 || sample_rate <= 0
+        || channels <= 0 || !out_result) {
+        set_error(error_message, error_message_capacity, "invalid voice health PCM argument");
+        return PITCHEE_ERROR_INVALID_ARGUMENT;
+    }
+    *out_result = {};
+    try {
+        reporter.progress(PITCHEE_PROGRESS_STAGE_RESAMPLING_AUDIO, 0, 1);
+        const std::vector<float> signal = pitchee::resample_mono(
+            samples,
+            sample_count,
+            channels,
+            sample_rate,
+            pitchee::kSampleRate
+        );
+        if (signal.empty()) throw std::invalid_argument("empty audio");
+        reporter.progress(PITCHEE_PROGRESS_STAGE_RESAMPLING_AUDIO, 1, 1);
+
+        const F0Thresholds f0_thresholds{
+            analyzer->min_f0_hz,
+            analyzer->max_f0_hz,
+            analyzer->min_f0_confidence,
+        };
+        const auto pitch = analyze_pitch(
+            *analyzer->swift_f0,
+            signal,
+            reporter,
+            f0_thresholds
+        );
+        const auto vad = analyzer->vad->detect(
+            signal,
+            [&reporter](size_t completed, size_t total) {
+                reporter.progress(
+                    PITCHEE_PROGRESS_STAGE_DETECTING_SPEECH,
+                    completed,
+                    total
+                );
+            }
+        );
+        if (vad.segments.empty()) {
+            throw std::runtime_error("Silero VAD detected no speech");
+        }
+
+        reporter.progress(PITCHEE_PROGRESS_STAGE_PREPARING_VOICE_HEALTH, 0, 1);
+        const auto windows = pitchee::voice_health_windows(signal.size());
+        std::vector<std::vector<float>> patches;
+        patches.reserve(windows.size());
+        for (const auto& window : windows) {
+            patches.push_back(pitchee::crop_window(signal, window));
+        }
+        reporter.progress(PITCHEE_PROGRESS_STAGE_PREPARING_VOICE_HEALTH, 1, 1);
+
+        const auto embeddings = embed_waveforms(
+            *analyzer->ecapa_frontend,
+            *analyzer->ecapa,
+            patches,
+            reporter,
+            PITCHEE_PROGRESS_STAGE_EXTRACTING_VOICE_HEALTH_EMBEDDINGS
+        );
+        reporter.progress(PITCHEE_PROGRESS_STAGE_SCORING_VOICE_HEALTH, 0, 1);
+        const auto health = pitchee::analyze_voice_health(
+            signal,
+            embeddings,
+            pitch,
+            vad
+        );
+        reporter.progress(PITCHEE_PROGRESS_STAGE_SCORING_VOICE_HEALTH, 1, 1);
+
+        out_result->health_score = health.health_score;
+        out_result->disorder_probability = health.disorder_probability;
+        out_result->decision_threshold = pitchee::kVoiceHealthDecisionThreshold;
+        out_result->is_disordered = health.disordered ? 1 : 0;
+        out_result->features = {
+            health.acoustic[0],
+            health.acoustic[1],
+            health.acoustic[2],
+            health.acoustic[3],
+            health.acoustic[4],
+            health.acoustic[5],
+            health.acoustic[6],
+            health.acoustic[7],
+            health.acoustic[8],
+            health.acoustic[9],
+            health.acoustic[10],
+            health.acoustic[11],
+            health.acoustic[12],
+            health.acoustic[13],
+        };
+        reporter.progress(PITCHEE_PROGRESS_STAGE_COMPLETED, 1, 1);
+        return PITCHEE_SUCCESS;
+    } catch (const std::invalid_argument& error) {
+        set_error(error_message, error_message_capacity, error.what());
+        return PITCHEE_ERROR_INVALID_ARGUMENT;
+    } catch (const std::exception& error) {
+        set_error(error_message, error_message_capacity, error.what());
+        return status_for_exception(error);
+    }
+}
+
 pitchee_status_t analyze_pcm_impl(
     pitchee_analyzer_t* analyzer,
     const float* samples,
@@ -925,6 +1037,76 @@ pitchee_status_t pitchee_analyze_wav_file(
         error_message,
         error_message_capacity
     );
+}
+
+pitchee_status_t pitchee_analysis_run_voice_health(
+    pitchee_analyzer_t* analyzer,
+    const float* samples,
+    size_t sample_count,
+    int32_t sample_rate,
+    int32_t channels,
+    pitchee_progress_callback_t progress_callback,
+    void* user_data,
+    pitchee_voice_health_result_t* out_result,
+    char* error_message,
+    size_t error_message_capacity
+) {
+    const ProgressReporter reporter{
+        progress_callback,
+        user_data,
+    };
+    return run_voice_health_pcm_impl(
+        analyzer,
+        samples,
+        sample_count,
+        sample_rate,
+        channels,
+        reporter,
+        out_result,
+        error_message,
+        error_message_capacity
+    );
+}
+
+pitchee_status_t pitchee_analysis_run_voice_health_wav_file(
+    pitchee_analyzer_t* analyzer,
+    const char* wav_path,
+    pitchee_progress_callback_t progress_callback,
+    void* user_data,
+    pitchee_voice_health_result_t* out_result,
+    char* error_message,
+    size_t error_message_capacity
+) {
+    if (!analyzer || !wav_path || !out_result) {
+        set_error(error_message, error_message_capacity, "invalid voice health WAV argument");
+        return PITCHEE_ERROR_INVALID_ARGUMENT;
+    }
+    const ProgressReporter reporter{
+        progress_callback,
+        user_data,
+    };
+    try {
+        reporter.progress(PITCHEE_PROGRESS_STAGE_LOADING_AUDIO, 0, 1);
+        const pitchee::WavData wav = pitchee::read_wav(wav_path);
+        reporter.progress(PITCHEE_PROGRESS_STAGE_LOADING_AUDIO, 1, 1);
+        return run_voice_health_pcm_impl(
+            analyzer,
+            wav.samples.data(),
+            wav.samples.size(),
+            wav.sample_rate,
+            wav.channels,
+            reporter,
+            out_result,
+            error_message,
+            error_message_capacity
+        );
+    } catch (const std::invalid_argument& error) {
+        set_error(error_message, error_message_capacity, error.what());
+        return PITCHEE_ERROR_INVALID_ARGUMENT;
+    } catch (const std::exception& error) {
+        set_error(error_message, error_message_capacity, error.what());
+        return status_for_exception(error);
+    }
 }
 
 pitchee_status_t pitchee_realtime_f0_create_with_options(

@@ -33,7 +33,10 @@ typedef enum pitchee_progress_stage_t {
     PITCHEE_PROGRESS_STAGE_SCORING_NATURALNESS_WINDOWS = 9,
     PITCHEE_PROGRESS_STAGE_CALCULATING_SCORES = 10,
     PITCHEE_PROGRESS_STAGE_SERIALIZING_RESULT = 11,
-    PITCHEE_PROGRESS_STAGE_COMPLETED = 12
+    PITCHEE_PROGRESS_STAGE_COMPLETED = 12,
+    PITCHEE_PROGRESS_STAGE_PREPARING_VOICE_HEALTH = 13,
+    PITCHEE_PROGRESS_STAGE_EXTRACTING_VOICE_HEALTH_EMBEDDINGS = 14,
+    PITCHEE_PROGRESS_STAGE_SCORING_VOICE_HEALTH = 15
 } pitchee_progress_stage_t;
 
 typedef struct pitchee_progress_t {
@@ -119,6 +122,31 @@ typedef struct pitchee_score_result_t {
     char score_rule[32];
 } pitchee_score_result_t;
 
+typedef struct pitchee_voice_health_features_t {
+    double hnr_db;
+    double cpps_db;
+    double jitter_local;
+    double jitter_rap;
+    double jitter_ppq5;
+    double shimmer_local;
+    double shimmer_apq3;
+    double shimmer_apq5;
+    double f0_median;
+    double f0_iqr;
+    double f0_cv;
+    double voiced_fraction;
+    double intensity_median;
+    double intensity_iqr;
+} pitchee_voice_health_features_t;
+
+typedef struct pitchee_voice_health_result_t {
+    double health_score;
+    double disorder_probability;
+    double decision_threshold;
+    int32_t is_disordered;
+    pitchee_voice_health_features_t features;
+} pitchee_voice_health_result_t;
+
 PITCHEE_API const char* pitchee_version(void);
 
 /*
@@ -185,6 +213,34 @@ PITCHEE_API pitchee_status_t pitchee_analyze_wav_file(
     pitchee_progress_callback_t progress_callback,
     void* user_data,
     char** out_json,
+    char* error_message,
+    size_t error_message_capacity
+);
+
+/*
+ * Voice health is intentionally separate from the VFP/F0/Naturalness bundle.
+ * It reuses the analyzer's VAD, SwiftF0 and ECAPA models, followed by the
+ * embedded logistic head trained by the Pitchee experiment pipeline.
+ */
+PITCHEE_API pitchee_status_t pitchee_analysis_run_voice_health(
+    pitchee_analyzer_t* analyzer,
+    const float* samples,
+    size_t sample_count,
+    int32_t sample_rate,
+    int32_t channels,
+    pitchee_progress_callback_t progress_callback,
+    void* user_data,
+    pitchee_voice_health_result_t* out_result,
+    char* error_message,
+    size_t error_message_capacity
+);
+
+PITCHEE_API pitchee_status_t pitchee_analysis_run_voice_health_wav_file(
+    pitchee_analyzer_t* analyzer,
+    const char* wav_path,
+    pitchee_progress_callback_t progress_callback,
+    void* user_data,
+    pitchee_voice_health_result_t* out_result,
     char* error_message,
     size_t error_message_capacity
 );
