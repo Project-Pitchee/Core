@@ -337,17 +337,46 @@ double map_disorder_probability(double probability) {
 
 double ridge_score(
     const std::vector<double>& features,
-    const double* coefficients,
+    const float* coefficients,
     double intercept
 ) {
     if (features.size() != kVoiceSeverityFeatureCount) return 0.0;
-    double value = intercept;
+
+    std::vector<double> standardized(features.size(), 0.0);
     for (size_t index = 0; index < features.size(); ++index) {
         const double scale = std::abs(kVoiceSeverityScalerScale[index]) > 1e-12
             ? kVoiceSeverityScalerScale[index]
             : 1.0;
-        value += coefficients[index]
-            * (features[index] - kVoiceSeverityScalerMean[index]) / scale;
+        standardized[index] = (features[index] - kVoiceSeverityScalerMean[index])
+            / scale;
+    }
+
+    std::vector<double> embedded(kVoiceSeverityComponentCount, 0.0);
+    for (size_t component = 0; component < kVoiceSeverityComponentCount; ++component) {
+        double squared_distance = 0.0;
+        const size_t offset = component * kVoiceSeverityFeatureCount;
+        for (size_t index = 0; index < features.size(); ++index) {
+            const double delta = standardized[index]
+                - kVoiceSeverityComponents[offset + index];
+            squared_distance += delta * delta;
+        }
+        embedded[component] = std::exp(
+            -kVoiceSeverityNystroemGamma * squared_distance
+        );
+    }
+
+    std::vector<double> transformed(kVoiceSeverityComponentCount, 0.0);
+    for (size_t row = 0; row < kVoiceSeverityComponentCount; ++row) {
+        const size_t offset = row * kVoiceSeverityComponentCount;
+        for (size_t column = 0; column < kVoiceSeverityComponentCount; ++column) {
+            transformed[row] += embedded[column]
+                * kVoiceSeverityNormalization[offset + column];
+        }
+    }
+
+    double value = intercept;
+    for (size_t index = 0; index < kVoiceSeverityComponentCount; ++index) {
+        value += coefficients[index] * transformed[index];
     }
     return value;
 }
@@ -468,6 +497,7 @@ VoiceHealthResult analyze_voice_health(
         result.acoustic.begin(),
         result.acoustic.end()
     );
+    severity_features.push_back(raw_disorder_probability);
     result.grbas_grade = std::max(
         kGrbasGradeMinimum,
         std::min(

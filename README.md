@@ -192,14 +192,15 @@ health_score <  30 -> 嘶哑
 `decision_threshold` 因此使用 0-100 健康分尺度，值为 `30`。Android 上 VAD、
 SwiftF0 和 ECAPA 仍走既有 ncnn 后端，因此不需要额外 ncnn 转换步骤。
 
-同一组 ECAPA 和声学特征还会输入两个 Ridge 连续严重度头：
+同一组 ECAPA 和声学特征，再加上 Logistic 原始异常概率作为第 399 维，
+会输入两个 Nystroem-RBF Ridge 连续严重度头：
 
 ```text
 severity.grbas_grade      0-3
 severity.cape_v_severity  0-100
 ```
 
-Ridge 系数编译进 `voice_severity_model.hpp`，因此双头共享一次特征提取，
+Ridge 核基和系数编译进 `voice_severity_model.hpp`，因此三个头共享一次特征提取，
 Android 同样不需要额外的 ncnn 模型文件。
 
 macOS 也可以直接从命令行录音并分析。录音使用系统当前的默认输入设备，可在
