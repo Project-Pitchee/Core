@@ -63,20 +63,25 @@ bool json_number(const std::string& json, const std::string& key, double& value)
 
 int main(int argc, char** argv) {
     const bool record_mode = argc >= 5 && std::strcmp(argv[2], "record") == 0;
+    const bool record_health_mode = (argc == 4 || argc == 5)
+        && std::strcmp(argv[2], "record-health") == 0;
     const bool record_severity_mode = (argc == 4 || argc == 5)
         && std::strcmp(argv[2], "record-severity") == 0;
     const bool voice_health_mode = argc == 4
         && std::strcmp(argv[2], "voice-health") == 0;
     const bool voice_severity_mode = argc == 4
         && std::strcmp(argv[2], "voice-severity") == 0;
-    if ((!record_mode && !record_severity_mode && !voice_health_mode
+    if ((!record_mode && !record_health_mode && !record_severity_mode && !voice_health_mode
             && !voice_severity_mode && argc != 4)
         || (record_mode && argc != 5 && argc != 6)
+        || (record_health_mode && argc != 4 && argc != 5)
         || (record_severity_mode && argc != 4 && argc != 5)) {
         std::cerr << "usage: pitchee_cli <model-directory> <audio.wav> "
                      "<feminization|masculinization>\n"
                      "       pitchee_cli <model-directory> record <seconds> "
                      "<feminization|masculinization> [output.wav]\n"
+                     "       pitchee_cli <model-directory> record-health <seconds> "
+                     "[output.wav]\n"
                      "       pitchee_cli <model-directory> record-severity <seconds> "
                      "[output.wav]\n"
                      "       pitchee_cli <model-directory> voice-health <audio.wav>\n"
@@ -85,7 +90,8 @@ int main(int argc, char** argv) {
     }
 
     pitchee_score_profile_t score_profile;
-    if (!voice_health_mode && !voice_severity_mode && !record_severity_mode) {
+    if (!voice_health_mode && !voice_severity_mode
+        && !record_health_mode && !record_severity_mode) {
         const char* profile_argument = record_mode ? argv[4] : argv[3];
         if (!parse_profile(profile_argument, score_profile)) {
             std::cerr << "invalid score profile: " << profile_argument << "\n";
@@ -94,14 +100,14 @@ int main(int argc, char** argv) {
     }
 
     std::string audio_path;
-    if (record_mode || record_severity_mode) {
+    if (record_mode || record_health_mode || record_severity_mode) {
         audio_path.clear();
     } else if (voice_health_mode || voice_severity_mode) {
         audio_path = argv[3];
     } else {
         audio_path = argv[2];
     }
-    if (record_mode || record_severity_mode) {
+    if (record_mode || record_health_mode || record_severity_mode) {
         char* duration_end = nullptr;
         const double duration = std::strtod(argv[3], &duration_end);
         if (duration_end == argv[3] || *duration_end != '\0'
@@ -111,7 +117,7 @@ int main(int argc, char** argv) {
         }
         if (record_mode && argc == 6) {
             audio_path = argv[5];
-        } else if (record_severity_mode && argc == 5) {
+        } else if ((record_health_mode || record_severity_mode) && argc == 5) {
             audio_path = argv[4];
         } else {
             audio_path = (
@@ -178,11 +184,11 @@ int main(int argc, char** argv) {
 
     char* json = nullptr;
     const char* show_progress = std::getenv("PITCHEE_CLI_PROGRESS");
-    if (voice_health_mode) {
+    if (voice_health_mode || record_health_mode) {
         pitchee_voice_health_result_t health{};
         status = pitchee_analysis_run_voice_health_wav_file(
             analyzer,
-            argv[3],
+            audio_path.c_str(),
             show_progress && *show_progress ? progress_callback : nullptr,
             nullptr,
             &health,
@@ -193,6 +199,9 @@ int main(int argc, char** argv) {
             std::cerr << "voice-health analysis failed: " << error << "\n";
             pitchee_analyzer_destroy(analyzer);
             return static_cast<int>(status);
+        }
+        if (record_health_mode) {
+            std::cout << "recording: " << audio_path << "\n";
         }
         std::cout << "health_score: " << health.health_score << "\n";
         std::cout << "disorder_probability: "

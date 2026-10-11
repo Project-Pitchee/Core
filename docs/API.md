@@ -246,6 +246,12 @@ The desktop CLI also supports direct recording followed by v2:
 ./build-macos/pitchee_cli ./models record-severity 8 /tmp/voice.wav
 ```
 
+For direct recording followed by the v1 health head:
+
+```bash
+./build-macos/pitchee_cli ./models record-health 8 /tmp/voice.wav
+```
+
 v2 passes the 398 ECAPA/acoustic features through a 384-component
 Nystroem-RBF map and then two Ridge heads:
 
