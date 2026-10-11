@@ -142,6 +142,7 @@ typedef struct pitchee_voice_health_features_t {
 typedef struct pitchee_voice_health_result_t {
     double health_score;
     double disorder_probability;
+    /* Health-score decision boundary in the same 0-100 scale as health_score. */
     double decision_threshold;
     int32_t is_disordered;
     pitchee_voice_health_features_t features;

@@ -686,7 +686,7 @@ pitchee_status_t run_voice_health_pcm_impl(
 
         out_result->health_score = health.health_score;
         out_result->disorder_probability = health.disorder_probability;
-        out_result->decision_threshold = pitchee::kVoiceHealthDecisionThreshold;
+        out_result->decision_threshold = pitchee::kVoiceHealthHealthScoreThreshold;
         out_result->is_disordered = health.disordered ? 1 : 0;
         out_result->features = {
             health.acoustic[0],

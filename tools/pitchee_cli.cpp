@@ -179,8 +179,8 @@ int main(int argc, char** argv) {
         std::cout << "health_score: " << health.health_score << "\n";
         std::cout << "disorder_probability: "
                   << health.disorder_probability * 100.0 << "%\n";
-        std::cout << "decision_threshold: "
-                  << health.decision_threshold * 100.0 << "%\n";
+        std::cout << "health_score_threshold: "
+                  << health.decision_threshold << "\n";
         std::cout << "label: "
                   << (health.is_disordered ? "disordered" : "healthy") << "\n";
         pitchee_analyzer_destroy(analyzer);

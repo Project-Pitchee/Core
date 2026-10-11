@@ -225,17 +225,23 @@ Logistic head from `voice_health_model.hpp`. No extra model file is needed.
 Android uses the same ncnn-backed VAD, SwiftF0 and ECAPA path.
 
 The discriminant trained by the offline experiment was `0.4135834447`. Core
-applies a monotonic piecewise-linear mapping with fixed endpoints:
+applies a monotonic piecewise-linear mapping so that the trained boundary lands
+on health score `30`:
 
 ```text
-raw 0.0    -> mapped 0.0
-raw 0.4136 -> mapped 0.5
-raw 1.0    -> mapped 1.0
+raw disorder probability 0.0    -> health score 100
+raw disorder probability 0.4136 -> health score  30
+raw disorder probability 1.0    -> health score   0
 ```
 
-The reported `disorder_probability`, `health_score` and
-`decision_threshold` all use the mapped probability space. Therefore a
-`decision_threshold` of `0.5` is the actual deployment boundary.
+The reported `disorder_probability` uses the mapped probability space and
+`health_score = 100 * (1 - disorder_probability)`. `decision_threshold` is on
+the 0-100 health-score scale and is `30`:
+
+```text
+health_score >= 30 -> not hoarse
+health_score <  30 -> hoarse
+```
 
 ## Spectrum
 

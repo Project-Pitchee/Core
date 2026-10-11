@@ -323,11 +323,15 @@ double score_probability(
 
 double map_disorder_probability(double probability) {
     constexpr double raw_threshold = kVoiceHealthRawDecisionThreshold;
+    constexpr double mapped_threshold = kVoiceHealthMappedDisorderThreshold;
     probability = std::max(0.0, std::min(1.0, probability));
     if (probability <= raw_threshold) {
-        return 0.5 * probability / raw_threshold;
+        return mapped_threshold * probability / raw_threshold;
     }
-    return 0.5 + 0.5 * (probability - raw_threshold) / (1.0 - raw_threshold);
+    return mapped_threshold
+        + (1.0 - mapped_threshold)
+            * (probability - raw_threshold)
+            / (1.0 - raw_threshold);
 }
 
 }  // namespace
@@ -438,7 +442,7 @@ VoiceHealthResult analyze_voice_health(
     );
     result.disorder_probability = map_disorder_probability(raw_disorder_probability);
     result.health_score = 100.0 * (1.0 - result.disorder_probability);
-    result.disordered = result.disorder_probability >= kVoiceHealthDecisionThreshold;
+    result.disordered = result.health_score < kVoiceHealthHealthScoreThreshold;
     return result;
 }
 

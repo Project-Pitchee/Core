@@ -9,7 +9,8 @@ constexpr size_t kVoiceHealthFeatureCount = 398;
 constexpr size_t kVoiceHealthEcapaDimensions = 384;
 constexpr size_t kVoiceHealthAcousticFeatureCount = 14;
 constexpr double kVoiceHealthRawDecisionThreshold = 0.41358344470435732;
-constexpr double kVoiceHealthDecisionThreshold = 0.5;
+constexpr double kVoiceHealthMappedDisorderThreshold = 0.7;
+constexpr double kVoiceHealthHealthScoreThreshold = 30.0;
 
 static const double kVoiceHealthScalerMean[kVoiceHealthFeatureCount] = {
     0.00984111167f, 0.0318358997f, -0.00749338968f, -0.0103352645f, 0.0107055105f, 0.00827124354f,
