@@ -143,7 +143,8 @@ pitchee_status_t status_for_exception(const std::exception& error) {
     if (message.find("without ONNX Runtime") != std::string::npos) {
         return PITCHEE_ERROR_ORT_UNAVAILABLE;
     }
-    if (message.find("Silero VAD detected no speech") != std::string::npos) {
+    if (message.find("Silero VAD detected no speech") != std::string::npos
+        || message.find("no reliably assessable speech") != std::string::npos) {
         return PITCHEE_ERROR_NO_SPEECH;
     }
     if (message.find("unsupported WAV") != std::string::npos) {
@@ -646,8 +647,12 @@ pitchee_status_t run_voice_health_pcm_impl(
             reporter,
             f0_thresholds
         );
+        // The health path runs its own, looser VAD operating point: the
+        // general periodicity gate discards severe breathy dysphonia as
+        // breath. Never loosen the general one here.
         const auto vad = analyzer->vad->detect(
             signal,
+            pitchee::voice_health_vad_thresholds(),
             [&reporter](size_t completed, size_t total) {
                 reporter.progress(
                     PITCHEE_PROGRESS_STAGE_DETECTING_SPEECH,
@@ -656,8 +661,21 @@ pitchee_status_t run_voice_health_pcm_impl(
                 );
             }
         );
+        const pitchee::VoiceHealthAssessment assessment{
+            !vad.segments.empty(),
+            vad.rejection,
+            vad.input_seconds,
+            vad.speech_seconds,
+            vad.silero_segment_count,
+            vad.discarded_breath_like_count,
+        };
+        out_result->assessment = assessment;
         if (vad.segments.empty()) {
-            throw std::runtime_error("Silero VAD detected no speech");
+            // The caller must present this as "not reliably assessable" and
+            // recommend a clinical review. Score fields stay zeroed: the
+            // perturbation estimators would silently return 0.0 here, so any
+            // score computed from them would be fabricated.
+            throw std::runtime_error("no reliably assessable speech");
         }
 
         reporter.progress(PITCHEE_PROGRESS_STAGE_PREPARING_VOICE_HEALTH, 0, 1);
@@ -687,6 +705,7 @@ pitchee_status_t run_voice_health_pcm_impl(
         reporter.progress(PITCHEE_PROGRESS_STAGE_SCORING_VOICE_HEALTH, 1, 1);
 
         *out_result = health;
+        out_result->assessment = assessment;
         reporter.progress(PITCHEE_PROGRESS_STAGE_COMPLETED, 1, 1);
         return PITCHEE_SUCCESS;
     } catch (const std::invalid_argument& error) {
@@ -696,6 +715,19 @@ pitchee_status_t run_voice_health_pcm_impl(
         set_error(error_message, error_message_capacity, error.what());
         return status_for_exception(error);
     }
+}
+
+pitchee_voice_health_assessment_t copy_assessment(
+    const pitchee::VoiceHealthAssessment& assessment
+) {
+    return {
+        assessment.assessable ? 1 : 0,
+        static_cast<int32_t>(assessment.rejection),
+        assessment.input_seconds,
+        assessment.speech_seconds,
+        assessment.silero_segment_count,
+        assessment.discarded_breath_like_count,
+    };
 }
 
 void copy_voice_health_result(
@@ -722,6 +754,16 @@ void copy_voice_health_result(
         health.acoustic[12],
         health.acoustic[13],
     };
+    out_result->assessment = copy_assessment(health.assessment);
+}
+
+void copy_voice_severity_result(
+    const pitchee::VoiceHealthResult& health,
+    pitchee_voice_severity_result_t* out_result
+) {
+    out_result->grbas_grade = health.grbas_grade;
+    out_result->cape_v_severity = health.cape_v_severity;
+    out_result->assessment = copy_assessment(health.assessment);
 }
 
 pitchee_status_t analyze_pcm_impl(
@@ -1077,8 +1119,8 @@ pitchee_status_t pitchee_analysis_run_voice_health(
         error_message,
         error_message_capacity
     );
-    if (status != PITCHEE_SUCCESS) return status;
     copy_voice_health_result(health, out_result);
+    if (status != PITCHEE_SUCCESS) return status;
     return PITCHEE_SUCCESS;
 }
 
@@ -1116,8 +1158,8 @@ pitchee_status_t pitchee_analysis_run_voice_health_wav_file(
             error_message,
             error_message_capacity
         );
-        if (status != PITCHEE_SUCCESS) return status;
         copy_voice_health_result(health, out_result);
+        if (status != PITCHEE_SUCCESS) return status;
         return PITCHEE_SUCCESS;
     } catch (const std::invalid_argument& error) {
         set_error(error_message, error_message_capacity, error.what());
@@ -1159,9 +1201,8 @@ pitchee_status_t pitchee_analysis_run_voice_health_v2(
         error_message,
         error_message_capacity
     );
+    copy_voice_severity_result(health, out_result);
     if (status != PITCHEE_SUCCESS) return status;
-    out_result->grbas_grade = health.grbas_grade;
-    out_result->cape_v_severity = health.cape_v_severity;
     return PITCHEE_SUCCESS;
 }
 
@@ -1197,9 +1238,8 @@ pitchee_status_t pitchee_analysis_run_voice_health_v2_wav_file(
             error_message,
             error_message_capacity
         );
+        copy_voice_severity_result(health, out_result);
         if (status != PITCHEE_SUCCESS) return status;
-        out_result->grbas_grade = health.grbas_grade;
-        out_result->cape_v_severity = health.cape_v_severity;
         return PITCHEE_SUCCESS;
     } catch (const std::invalid_argument& error) {
         set_error(error_message, error_message_capacity, error.what());

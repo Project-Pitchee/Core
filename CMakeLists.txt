@@ -264,6 +264,11 @@ if(PITCHEE_BUILD_TESTS)
     add_executable(pitchee_c_abi_test tests/c_abi_test.c)
     target_link_libraries(pitchee_c_abi_test PRIVATE pitchee_core)
     add_test(NAME pitchee_c_abi_test COMMAND pitchee_c_abi_test)
+
+    add_executable(pitchee_vad_gate_test tests/vad_gate_test.cpp)
+    target_link_libraries(pitchee_vad_gate_test PRIVATE pitchee_core)
+    target_include_directories(pitchee_vad_gate_test PRIVATE src)
+    add_test(NAME pitchee_vad_gate_test COMMAND pitchee_vad_gate_test)
 endif()
 
 include(GNUInstallDirs)

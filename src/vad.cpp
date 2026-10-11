@@ -12,10 +12,6 @@ namespace {
 constexpr int kWindowSize = 512;
 constexpr int kContextSize = 64;
 constexpr int kStateSize = 2 * 128;
-constexpr double kSpeechStartThreshold = 0.60;
-constexpr double kSpeechEndThreshold = 0.30;
-constexpr double kMinimumPeriodicity = 0.50;
-constexpr double kMinimumVoicedRatio = 0.12;
 constexpr int kPeriodicityFrameSamples = 400;
 constexpr int kPeriodicityHopSamples = 160;
 
@@ -65,7 +61,8 @@ double frame_periodicity(const float* frame, size_t size) {
 
 VadResult finalize_vad_result(
     const std::vector<float>& samples,
-    std::vector<RawSegment> raw_segments
+    std::vector<RawSegment> raw_segments,
+    const VadThresholds& thresholds
 ) {
     const int speech_padding_samples = kSampleRate * 20 / 1000;
 
@@ -104,6 +101,7 @@ VadResult finalize_vad_result(
     }
 
     VadResult result;
+    result.thresholds = thresholds;
     result.input_seconds = static_cast<double>(samples.size()) / kSampleRate;
     result.silero_segment_count = static_cast<int>(raw_segments.size());
     double speech_offset = 0.0;
@@ -127,13 +125,13 @@ VadResult finalize_vad_result(
         }
         std::vector<int> voiced;
         for (size_t index = 0; index < periodicities.size(); ++index) {
-            if (periodicities[index] >= kMinimumPeriodicity) {
+            if (periodicities[index] >= thresholds.minimum_periodicity) {
                 voiced.push_back(static_cast<int>(index));
             }
         }
         const double voiced_ratio = static_cast<double>(voiced.size())
             / std::max<size_t>(1, periodicities.size());
-        if (voiced.empty() || voiced_ratio < kMinimumVoicedRatio) {
+        if (voiced.empty() || voiced_ratio < thresholds.minimum_voiced_ratio) {
             ++result.discarded_breath_like_count;
             continue;
         }
@@ -160,6 +158,21 @@ VadResult finalize_vad_result(
         speech_offset += duration;
     }
     result.speech_seconds = speech_offset;
+    // A handful of retained frames is not enough to estimate perturbation
+    // features; scoring it would fabricate jitter/shimmer/CPPS values. Report
+    // it as no usable speech instead.
+    if (!result.segments.empty()
+        && result.speech_seconds < thresholds.minimum_speech_seconds) {
+        result.segments.clear();
+        result.speech_seconds = 0.0;
+        result.rejection = VadRejection::kInsufficientSpeech;
+        return result;
+    }
+    if (result.segments.empty()) {
+        result.rejection = result.silero_segment_count == 0
+            ? VadRejection::kSileroProbability
+            : VadRejection::kPeriodicityBreathLike;
+    }
     return result;
 }
 
@@ -180,8 +193,16 @@ VadResult VadDetector::detect(
     const std::vector<float>& samples,
     const std::function<void(size_t, size_t)>& progress
 ) const {
+    return detect(samples, general_vad_thresholds(), progress);
+}
+
+VadResult VadDetector::detect(
+    const std::vector<float>& samples,
+    const VadThresholds& thresholds,
+    const std::function<void(size_t, size_t)>& progress
+) const {
     if (samples.empty()) throw std::invalid_argument("empty audio");
-    if (lightweight_) return detect_light(samples, progress);
+    if (lightweight_) return detect_light(samples, thresholds, progress);
 
     std::vector<float> state(kStateSize, 0.0f);
     std::vector<float> context(kContextSize, 0.0f);
@@ -241,13 +262,13 @@ VadResult VadDetector::detect(
     for (size_t index = 0; index < probabilities.size(); ++index) {
         const double probability = probabilities[index];
         const int current_sample = static_cast<int>(index) * kWindowSize;
-        if (probability >= kSpeechStartThreshold && temporary_end != 0) temporary_end = 0;
-        if (probability >= kSpeechStartThreshold && !triggered) {
+        if (probability >= thresholds.speech_start_probability && temporary_end != 0) temporary_end = 0;
+        if (probability >= thresholds.speech_start_probability && !triggered) {
             triggered = true;
             current_start = current_sample;
             continue;
         }
-        if (probability < kSpeechEndThreshold && triggered) {
+        if (probability < thresholds.speech_end_probability && triggered) {
             if (temporary_end == 0) temporary_end = current_sample;
             const int silence_duration = current_sample - temporary_end;
             if (silence_duration < minimum_silence_samples) continue;
@@ -263,11 +284,12 @@ VadResult VadDetector::detect(
         raw_segments.push_back({current_start, static_cast<int>(samples.size())});
     }
 
-    return finalize_vad_result(samples, std::move(raw_segments));
+    return finalize_vad_result(samples, std::move(raw_segments), thresholds);
 }
 
 VadResult VadDetector::detect_light(
     const std::vector<float>& samples,
+    const VadThresholds& thresholds,
     const std::function<void(size_t, size_t)>& progress
 ) const {
     constexpr int frame_samples = 400;
@@ -288,7 +310,7 @@ VadResult VadDetector::detect_light(
         energy_db.push_back(20.0 * std::log10(std::max(rms, 1e-8)));
     }
     if (energy_db.empty()) {
-        return finalize_vad_result(samples, {});
+        return finalize_vad_result(samples, {}, thresholds);
     }
 
     std::vector<double> sorted = energy_db;
@@ -349,7 +371,7 @@ VadResult VadDetector::detect_light(
             static_cast<int>(samples.size())
         });
     }
-    return finalize_vad_result(samples, std::move(raw_segments));
+    return finalize_vad_result(samples, std::move(raw_segments), thresholds);
 }
 
 }  // namespace pitchee
