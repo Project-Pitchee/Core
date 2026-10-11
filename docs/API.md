@@ -224,6 +224,17 @@ reuses the analyzer's VAD, SwiftF0 and ECAPA models, then applies the embedded
 Logistic head from `voice_health_model.hpp`. No extra model file is needed.
 Android uses the same ncnn-backed VAD, SwiftF0 and ECAPA path.
 
+The same ECAPA/acoustic feature vector is also passed to two Ridge heads:
+
+```text
+health.severity.grbas_grade      -> clamped to 0-3
+health.severity.cape_v_severity  -> clamped to 0-100
+```
+
+Their coefficients are compiled into `voice_severity_model.hpp`. This is a
+shared-feature dual-head model: one feature extraction pass, one Logistic head,
+and two Ridge regression heads.
+
 The discriminant trained by the offline experiment was `0.4135834447`. Core
 applies a monotonic piecewise-linear mapping so that the trained boundary lands
 on health score `30`:

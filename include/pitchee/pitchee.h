@@ -139,6 +139,11 @@ typedef struct pitchee_voice_health_features_t {
     double intensity_iqr;
 } pitchee_voice_health_features_t;
 
+typedef struct pitchee_voice_severity_result_t {
+    double grbas_grade;
+    double cape_v_severity;
+} pitchee_voice_severity_result_t;
+
 typedef struct pitchee_voice_health_result_t {
     double health_score;
     double disorder_probability;
@@ -146,6 +151,7 @@ typedef struct pitchee_voice_health_result_t {
     double decision_threshold;
     int32_t is_disordered;
     pitchee_voice_health_features_t features;
+    pitchee_voice_severity_result_t severity;
 } pitchee_voice_health_result_t;
 
 PITCHEE_API const char* pitchee_version(void);

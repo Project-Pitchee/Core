@@ -183,6 +183,9 @@ int main(int argc, char** argv) {
                   << health.decision_threshold << "\n";
         std::cout << "label: "
                   << (health.is_disordered ? "disordered" : "healthy") << "\n";
+        std::cout << "grbas_grade: " << health.severity.grbas_grade << "\n";
+        std::cout << "cape_v_severity: "
+                  << health.severity.cape_v_severity << "\n";
         pitchee_analyzer_destroy(analyzer);
         return 0;
     }

@@ -76,6 +76,8 @@ struct VoiceHealthResult {
     bool disordered = false;
     std::array<double, 14> acoustic{};
     std::vector<double> ecapa_features;
+    double grbas_grade = 0.0;
+    double cape_v_severity = 0.0;
 };
 
 struct AnalysisResult {

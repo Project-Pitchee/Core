@@ -2,6 +2,7 @@
 
 #include "hnr.hpp"
 #include "voice_health_model.hpp"
+#include "voice_severity_model.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -334,6 +335,23 @@ double map_disorder_probability(double probability) {
             / (1.0 - raw_threshold);
 }
 
+double ridge_score(
+    const std::vector<double>& features,
+    const double* coefficients,
+    double intercept
+) {
+    if (features.size() != kVoiceSeverityFeatureCount) return 0.0;
+    double value = intercept;
+    for (size_t index = 0; index < features.size(); ++index) {
+        const double scale = std::abs(kVoiceSeverityScalerScale[index]) > 1e-12
+            ? kVoiceSeverityScalerScale[index]
+            : 1.0;
+        value += coefficients[index]
+            * (features[index] - kVoiceSeverityScalerMean[index]) / scale;
+    }
+    return value;
+}
+
 }  // namespace
 
 std::vector<SampleWindow> voice_health_windows(size_t sample_count) {
@@ -443,6 +461,35 @@ VoiceHealthResult analyze_voice_health(
     result.disorder_probability = map_disorder_probability(raw_disorder_probability);
     result.health_score = 100.0 * (1.0 - result.disorder_probability);
     result.disordered = result.health_score < kVoiceHealthHealthScoreThreshold;
+
+    std::vector<double> severity_features = result.ecapa_features;
+    severity_features.insert(
+        severity_features.end(),
+        result.acoustic.begin(),
+        result.acoustic.end()
+    );
+    result.grbas_grade = std::max(
+        kGrbasGradeMinimum,
+        std::min(
+            kGrbasGradeMaximum,
+            ridge_score(
+                severity_features,
+                kGrbasGradeCoefficients,
+                kGrbasGradeIntercept
+            )
+        )
+    );
+    result.cape_v_severity = std::max(
+        kCapeVSeverityMinimum,
+        std::min(
+            kCapeVSeverityMaximum,
+            ridge_score(
+                severity_features,
+                kCapeVSeverityCoefficients,
+                kCapeVSeverityIntercept
+            )
+        )
+    );
     return result;
 }
 

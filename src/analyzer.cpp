@@ -704,6 +704,8 @@ pitchee_status_t run_voice_health_pcm_impl(
             health.acoustic[12],
             health.acoustic[13],
         };
+        out_result->severity.grbas_grade = health.grbas_grade;
+        out_result->severity.cape_v_severity = health.cape_v_severity;
         reporter.progress(PITCHEE_PROGRESS_STAGE_COMPLETED, 1, 1);
         return PITCHEE_SUCCESS;
     } catch (const std::invalid_argument& error) {
