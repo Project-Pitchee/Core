@@ -139,10 +139,44 @@ typedef struct pitchee_voice_health_features_t {
     double intensity_iqr;
 } pitchee_voice_health_features_t;
 
+/* Why the voice-activity detector found no usable speech in a clip. */
+typedef enum pitchee_vad_rejection_t {
+    PITCHEE_VAD_REJECTION_NONE = 0,
+    /* Silero reported no speech anywhere in the clip. */
+    PITCHEE_VAD_REJECTION_SILERO_PROBABILITY = 1,
+    /* Speech was found but every segment was filtered as breath-like. */
+    PITCHEE_VAD_REJECTION_PERIODICITY_BREATH_LIKE = 2,
+    /* Speech survived but is too short to estimate perturbation features. */
+    PITCHEE_VAD_REJECTION_INSUFFICIENT_SPEECH = 3
+} pitchee_vad_rejection_t;
+
+/*
+ * Whether the clip could be scored at all, and the VAD evidence behind that.
+ *
+ * assessable == 0 means the score fields of the enclosing result carry no
+ * information and MUST NOT be shown to a user as a score. Present the clip as
+ * not reliably assessable and recommend a clinical review instead. The health
+ * entry points return PITCHEE_ERROR_NO_SPEECH in that case and zero the score
+ * fields, so a caller that ignores this struct cannot read a fabricated score
+ * either.
+ */
+typedef struct pitchee_voice_health_assessment_t {
+    int32_t assessable;
+    int32_t vad_rejection; /* pitchee_vad_rejection_t */
+    double input_seconds;
+    double speech_seconds;
+    int32_t silero_segment_count;
+    int32_t discarded_breath_like_count;
+} pitchee_voice_health_assessment_t;
+
 typedef struct pitchee_voice_severity_result_t {
     double grbas_grade;
     double cape_v_severity;
+    /* Always populated, including when the call returns
+     * PITCHEE_ERROR_NO_SPEECH. Check assessment.assessable first. */
+    pitchee_voice_health_assessment_t assessment;
 } pitchee_voice_severity_result_t;
+
 
 typedef struct pitchee_voice_health_result_t {
     double health_score;
@@ -151,6 +185,10 @@ typedef struct pitchee_voice_health_result_t {
     double decision_threshold;
     int32_t is_disordered;
     pitchee_voice_health_features_t features;
+    /* Always populated, including when the call returns
+     * PITCHEE_ERROR_NO_SPEECH. Check assessment.assessable before reading
+     * any score field. */
+    pitchee_voice_health_assessment_t assessment;
 } pitchee_voice_health_result_t;
 
 PITCHEE_API const char* pitchee_version(void);

@@ -22,9 +22,18 @@ public:
         const std::function<void(size_t, size_t)>& progress = {}
     ) const;
 
+    // Same detector, explicit operating point. Used by the health-scoring
+    // path, which must not share the general VAD's periodicity gate.
+    VadResult detect(
+        const std::vector<float>& samples,
+        const VadThresholds& thresholds,
+        const std::function<void(size_t, size_t)>& progress = {}
+    ) const;
+
 private:
     VadResult detect_light(
         const std::vector<float>& samples,
+        const VadThresholds& thresholds,
         const std::function<void(size_t, size_t)>& progress
     ) const;
 

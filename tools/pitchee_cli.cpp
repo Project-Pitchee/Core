@@ -61,6 +61,30 @@ bool json_number(const std::string& json, const std::string& key, double& value)
 
 }  // namespace
 
+namespace {
+
+const char* vad_rejection_name(int32_t rejection) {
+    switch (rejection) {
+        case PITCHEE_VAD_REJECTION_NONE: return "none";
+        case PITCHEE_VAD_REJECTION_SILERO_PROBABILITY: return "silero_probability";
+        case PITCHEE_VAD_REJECTION_PERIODICITY_BREATH_LIKE: return "periodicity_breath_like";
+        case PITCHEE_VAD_REJECTION_INSUFFICIENT_SPEECH: return "insufficient_speech";
+        default: return "unknown";
+    }
+}
+
+void print_assessment(const pitchee_voice_health_assessment_t& assessment) {
+    std::cout << "assessable: " << (assessment.assessable ? "true" : "false") << "\n";
+    std::cout << "vad_rejection: " << vad_rejection_name(assessment.vad_rejection) << "\n";
+    std::cout << "speech_seconds: " << assessment.speech_seconds
+              << " / " << assessment.input_seconds << "\n";
+    std::cout << "silero_segments: " << assessment.silero_segment_count
+              << " discarded_breath_like: "
+              << assessment.discarded_breath_like_count << "\n";
+}
+
+}  // namespace
+
 int main(int argc, char** argv) {
     const bool record_mode = argc >= 5 && std::strcmp(argv[2], "record") == 0;
     const bool record_health_mode = (argc == 4 || argc == 5)
@@ -197,6 +221,11 @@ int main(int argc, char** argv) {
         );
         if (status != PITCHEE_SUCCESS) {
             std::cerr << "voice-health analysis failed: " << error << "\n";
+            if (status == PITCHEE_ERROR_NO_SPEECH) {
+                // Not an error in the clip: it carries no reliably assessable
+                // speech, so there is no score to show.
+                print_assessment(health.assessment);
+            }
             pitchee_analyzer_destroy(analyzer);
             return static_cast<int>(status);
         }
@@ -210,6 +239,7 @@ int main(int argc, char** argv) {
                   << health.decision_threshold << "\n";
         std::cout << "label: "
                   << (health.is_disordered ? "disordered" : "healthy") << "\n";
+        print_assessment(health.assessment);
         pitchee_analyzer_destroy(analyzer);
         return 0;
     }
@@ -227,6 +257,9 @@ int main(int argc, char** argv) {
         );
         if (status != PITCHEE_SUCCESS) {
             std::cerr << "voice-severity analysis failed: " << error << "\n";
+            if (status == PITCHEE_ERROR_NO_SPEECH) {
+                print_assessment(severity.assessment);
+            }
             pitchee_analyzer_destroy(analyzer);
             return static_cast<int>(status);
         }
