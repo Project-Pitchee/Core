@@ -146,11 +146,11 @@ int main() {
     const auto status = pitchee_hnr_analyze(tone.data(), tone.size(), &full_vad, 1, capture_window, &capture, &external);
     capture.call_active = false;
     require(status == PITCHEE_SUCCESS && allocation_count == allocations_before_api,
-            "external HNR consumes PCM and supplied VAD with zero heap allocations and no model");
+            "HNR consumes PCM and supplied VAD with zero heap allocations and no model");
     require(capture.all_callbacks_synchronous && capture.count == 4,
-            "external HNR emits independent 10 ms starts synchronously before return");
+            "HNR emits independent 10 ms starts synchronously before return");
     require(external.window_seconds == 0.04 && external.has_hnr && external.hnr_window_count > 0,
-            "external HNR reports its own 40 ms window and valid correlation summary");
+            "HNR reports its own 40 ms window and valid correlation summary");
     const auto independent = pitchee::analyze_hnr(tone.data(), tone.size(), &full_vad, 1);
     require(independent.window_seconds == 0.04 && independent.windows.size() == capture.count,
             "offline wrapper preserves the independent external timeline");

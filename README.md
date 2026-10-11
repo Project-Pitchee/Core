@@ -170,6 +170,19 @@ unzip /tmp/onnxruntime-ios.zip -d third_party/onnxruntime-ios
 
 第三个参数必须显式指定 `feminization` 或 `masculinization`。
 
+macOS 也可以直接从命令行录音并分析。录音使用系统当前的默认输入设备，可在
+“系统设置 → 声音 → 输入”中切换：
+
+```bash
+./build-macos/pitchee_cli ./models record 8 feminization
+./build-macos/pitchee_cli ./models record 8 feminization /tmp/voice.wav
+```
+
+录音模式需要系统安装 `ffmpeg`，第一次运行时 macOS 会请求麦克风权限。录音先以
+macOS 使用 Core 内置的 AVAudioEngine 直接采集 Float32 PCM，Core 再在分析阶段
+统一转换到 16 kHz；不再启动外部 ffmpeg 进程，避免实时管道和重采样产生卡顿或
+电子声。输出包括嗓音健康分、异常概率、平均 F0 和现有综合分。
+
 CLI 支持 PCM16、PCM32 和 Float32 WAV。M4A、MP3、AAC 等压缩格式应通过
 AVFoundation、MediaCodec 或桌面解码器转换成 Float32 PCM。
 
@@ -409,6 +422,58 @@ pitchee_spectrum_destroy(spectrum);
 `first_bin_index + i` 和 `bin_hz` 计算每个 bin 的实际频率。Spectrum 输入
 同样要求 16 kHz mono Float32 PCM。
 
+## HNR（谐噪比）
+
+HNR 与 Spectrum 一样是独立分析模块，不属于评分分析流水线。它的公开 ABI 位于
+`include/pitchee/hnr.h`，只接收 16 kHz mono Float32 PCM 和预先计算的 VAD
+区间，不会自行加载模型，也不会出现在 `pitchee_analyze_*` 的 JSON 中。
+
+需要 analyzer 的只应当是 VAD 分段步骤。Core 提供
+`pitchee_analyzer_detect_vad()`：它可以使用任意输入采样率/声道数，返回原始
+时间轴上的 `pitchee_vad_segment_t`。客户端把同样的 16 kHz PCM 和这些区间传给
+`pitchee_hnr_analyze()` 即可组合两个独立模块：
+
+```c
+#include "pitchee/pitchee.h"
+#include "pitchee/hnr.h"
+
+typedef struct {
+    pitchee_vad_segment_t items[64];
+    size_t count;
+} VadSink;
+
+void collect_vad(const pitchee_vad_segment_t* segment, void* user_data) {
+    VadSink* sink = user_data;
+    if (sink->count < 64) sink->items[sink->count++] = *segment;
+}
+
+pitchee_analyzer_detect_vad(
+    analyzer,
+    pcm_16k_mono,
+    sample_count,
+    16000,
+    1,
+    collect_vad,
+    &sink,
+    error,
+    sizeof(error)
+);
+
+pitchee_hnr_summary_t summary;
+pitchee_hnr_analyze(
+    pcm_16k_mono,
+    sample_count,
+    sink.items,
+    sink.count,
+    NULL,
+    NULL,
+    &summary
+);
+```
+
+依赖方向因此保持单向：`analyzer -> VAD segments`，`PCM + VAD segments -> HNR`。
+HNR 不依赖 analyzer，评分流水线也不依赖 HNR。
+
 ## Output
 
 输入一段有效音频后，会返回一个 UTF-8 JSON。下面是示例，数组内容省略了一部分：
@@ -450,17 +515,6 @@ pitchee_spectrum_destroy(spectrum);
       {"start_seconds": 0.7, "end_seconds": 0.8, "f0_hz": 187.3043}
     ]
   },
-  "voice_quality": {
-    "algorithm": "autocorr-praat-v1",
-    "hnr_db": 15.2,
-    "hnr_window_count": 1,
-    "hnr_std_db": 0.0,
-    "window_seconds": 0.04,
-    "windows": [
-      {"start_seconds": 0.0, "end_seconds": 0.04, "hnr_db": null},
-      {"start_seconds": 0.01, "end_seconds": 0.05, "hnr_db": 15.2}
-    ]
-  },
   "vfp": {
     "vfp_standard_score": 3.47584,
     "window_count": 1,
@@ -479,6 +533,28 @@ pitchee_spectrum_destroy(spectrum);
       {"start_seconds": 3.733, "end_seconds": 5.248, "score": 80.8774}
     ]
   },
+  "voice_health": {
+    "score": 86.0704,
+    "disorder_probability": 13.9296,
+    "threshold": 59.8767,
+    "label": "healthy",
+    "features": {
+      "hnr_db": 11.7267,
+      "cpps_db": 100.3279,
+      "jitter_local": 0.1054,
+      "jitter_rap": 0.0659,
+      "jitter_ppq5": 0.0925,
+      "shimmer_local": 0.2114,
+      "shimmer_apq3": 0.0609,
+      "shimmer_apq5": 0.1121,
+      "f0_median": 162.2463,
+      "f0_iqr": 21.6768,
+      "f0_cv": 0.108,
+      "voiced_fraction": 0.4803,
+      "intensity_median": -36.959,
+      "intensity_iqr": 15.8411
+    }
+  },
   "composite": {
     "base_score": 12.1184,
     "final_score": 12.1184,
@@ -494,7 +570,7 @@ pitchee_spectrum_destroy(spectrum);
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `schema_version` | 整数 | JSON 数据契约版本。当前为 `4`；在 v3 基础上新增 `voice_quality`。 |
+| `schema_version` | 整数 | JSON 数据契约版本，当前为 `4`。 |
 | `model_version` | 字符串 | 模型组合版本。当前为 `2026-09`。模型更新后应同步更新。 |
 | `score_profile` | 字符串 | 当前评分标准，`feminization` 或 `masculinization`。 |
 
@@ -556,37 +632,6 @@ end_seconds - start_seconds
 | `start_seconds` | 秒 | 窗口在原始分析音频时间轴上的起点。 |
 | `end_seconds` | 秒 | 窗口在原始分析音频时间轴上的终点。 |
 | `f0_hz` | Hz 或 `null` | 窗口内有效浊音帧的平均 F0；没有有效帧时为 `null`。 |
-
-### `voice_quality`
-
-HNR（谐噪比）是无模型的外模块，使用 `autocorr-praat-v1`。独立采用 40 ms
-窗口（16 kHz 下 640 samples，容纳 75 Hz 的三个周期）和 10 ms hop
-（160 samples），不依赖 F0 置信度或窗口。先复用现有 VAD 的原始时间轴区间：
-只有实际窗口中心落入 `[start_seconds, end_seconds)` 才读取 PCM 并继续计算，
-其他窗口保留且 HNR 为 `null`；空 VAD 列表不会绕过门控。通过 VAD 后做去均值、
-重叠能量归一化自相关，搜索 75–600 Hz 对应的整数 lag，并用
-`10 × log10(r / (1 − r))` 转换为 dB。最大相关系数小于 `0.3` 时为 `null`；
-等于 `0.3` 时保留负的 dB 值。每个候选 lag 要求窗口至少包含两个周期，
-过短尾窗无可用 lag 时为 `null`。完美周期的 `r = 1` 使用最接近且小于 1
-的 `double`，确保结果可作为有限 JSON 数值保存。具体数值约定见
-[API 文档](docs/API.md#result-schema)。
-
-| 字段 | 含义 |
-| --- | --- |
-| `algorithm` | 固定为 `autocorr-praat-v1`。 |
-| `hnr_db` | 有效窗口 HNR 的算术均值；没有有效值时为 `null`。 |
-| `hnr_window_count` | 参与均值的窗口数。 |
-| `hnr_std_db` | 有效窗口 HNR 的总体标准差（分母 N）；没有有效值时为 `null`。 |
-| `window_seconds` | HNR 自身的窗口长度，固定为 `0.04`。 |
-| `windows` | 独立按 10 ms hop 划分，包含 `start_seconds`、`end_seconds`、可空的 `hnr_db`；保留末尾重叠短窗。 |
-
-公开 ABI 位于 `include/pitchee/hnr.h`，实现位于 `external/hnr/`。
-`pitchee_hnr_analyze` 接收原始 16 kHz mono PCM 和已计算的 VAD 区间，无需
-创建 analyzer 或加载模型，采用同步回调返回窗口，计算零堆分配、零加锁。
-现有 VAD 是内部 Silero 模型及其呼吸过滤、裁剪结果；HNR 不自建检测器。
-录音分析在模型窗口循环之外复用其 `source_start_seconds/source_end_seconds`
-调用同一模块汇总结果；实时 F0 不计算 HNR。本字段不参与评分。旧 v3 录音
-没有此段。独立 C API 见 [API 文档](docs/API.md#standalone-hnr-no-models)。
 
 ### `vfp`
 

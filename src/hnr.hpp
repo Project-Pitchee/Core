@@ -1,7 +1,7 @@
 #ifndef PITCHEE_HNR_HPP
 #define PITCHEE_HNR_HPP
 
-#include "../../include/pitchee/hnr.h"
+#include "../include/pitchee/hnr.h"
 
 #include <cstddef>
 #include <optional>

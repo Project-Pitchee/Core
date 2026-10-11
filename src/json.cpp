@@ -1,6 +1,9 @@
 #include "internal.hpp"
 
+#include "voice_health_model.hpp"
+
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <iterator>
@@ -19,10 +22,6 @@ std::string number(double value) {
 
 std::string optional_number(bool present, double value) {
     return present ? number(value) : "null";
-}
-
-std::string optional_number(const std::optional<double>& value) {
-    return value ? number(*value) : "null";
 }
 
 const char* score_profile_name(int profile) {
@@ -129,23 +128,6 @@ std::string result_to_json(const AnalysisResult& result) {
     }
     output << "]},";
 
-    output << "\"voice_quality\":{";
-    output << "\"algorithm\":\"" << kHNRAlgorithm << "\",";
-    output << "\"hnr_db\":" << optional_number(result.voice_quality.hnr_db) << ",";
-    output << "\"hnr_window_count\":" << result.voice_quality.hnr_window_count << ",";
-    output << "\"hnr_std_db\":" << optional_number(result.voice_quality.hnr_std_db) << ",";
-    output << "\"window_seconds\":" << result.voice_quality.window_seconds << ",";
-    output << "\"windows\":[";
-    for (size_t index = 0; index < result.voice_quality.windows.size(); ++index) {
-        const auto& window = result.voice_quality.windows[index];
-        if (index) output << ",";
-        output << "{\"start_seconds\":" << number(window.start_seconds)
-               << ",\"end_seconds\":" << number(window.end_seconds)
-               << ",\"hnr_db\":" << optional_number(window.hnr_db)
-               << "}";
-    }
-    output << "]},";
-
     output << "\"vfp\":{";
     output << "\"vfp_standard_score\":" << number(result.vfp_standard_score) << ",";
     output << "\"window_count\":" << result.window_count << ",";
@@ -178,6 +160,39 @@ std::string result_to_json(const AnalysisResult& result) {
                << "}";
     }
     output << "]},";
+
+    output << "\"voice_health\":{";
+    output << "\"score\":" << number(result.voice_health.health_score) << ",";
+    output << "\"disorder_probability\":"
+           << number(result.voice_health.disorder_probability * 100.0) << ",";
+    output << "\"threshold\":"
+           << number(kVoiceHealthDecisionThreshold * 100.0) << ",";
+    output << "\"label\":\""
+           << (result.voice_health.disordered ? "disordered" : "healthy")
+           << "\",";
+    output << "\"features\":{";
+    static const char* names[] = {
+        "hnr_db", "cpps_db", "jitter_local", "jitter_rap", "jitter_ppq5",
+        "shimmer_local", "shimmer_apq3", "shimmer_apq5", "f0_median",
+        "f0_iqr", "f0_cv", "voiced_fraction", "intensity_median",
+        "intensity_iqr",
+    };
+    for (size_t index = 0; index < result.voice_health.acoustic.size(); ++index) {
+        if (index) output << ",";
+        output << "\"" << names[index] << "\":"
+               << number(result.voice_health.acoustic[index]);
+    }
+    output << "}";
+    const char* debug_features = std::getenv("PITCHEE_DEBUG_VOICE_HEALTH");
+    if (debug_features && *debug_features) {
+        output << ",\"ecapa_features\":[";
+        for (size_t index = 0; index < result.voice_health.ecapa_features.size(); ++index) {
+            if (index) output << ",";
+            output << number(result.voice_health.ecapa_features[index]);
+        }
+        output << "]";
+    }
+    output << "},";
 
     output << "\"composite\":{";
     output << "\"base_score\":" << number(result.score.base_score) << ",";

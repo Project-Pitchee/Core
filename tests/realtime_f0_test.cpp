@@ -1,4 +1,5 @@
 #include "pitchee/pitchee.h"
+#include "pitchee/hnr.h"
 
 #include <algorithm>
 #include <cmath>
@@ -16,6 +17,21 @@ struct Capture {
     double first_timestamp = 0.0;
     double last_timestamp = 0.0;
 };
+
+struct VadCapture {
+    pitchee_vad_segment_t segments[16];
+    size_t count = 0;
+};
+
+void capture_vad(
+    const pitchee_vad_segment_t* segment,
+    void* user_data
+) {
+    auto& capture = *static_cast<VadCapture*>(user_data);
+    if (capture.count < std::size(capture.segments)) {
+        capture.segments[capture.count++] = *segment;
+    }
+}
 
 void capture_frame(
     const pitchee_f0_frame_t* frame,
@@ -190,6 +206,49 @@ void test_options(
     pitchee_realtime_f0_destroy(stream);
 }
 
+void test_vad_hnr_composition(
+    pitchee_analyzer_t* analyzer,
+    const std::vector<float>& samples,
+    char* error,
+    size_t error_capacity
+) {
+    VadCapture vad;
+    if (pitchee_analyzer_detect_vad(
+            analyzer,
+            samples.data(),
+            samples.size(),
+            16000,
+            1,
+            capture_vad,
+            &vad,
+            error,
+            error_capacity
+        ) != PITCHEE_SUCCESS) {
+        std::cerr << "VAD isolation failed: " << error << "\n";
+        std::exit(1);
+    }
+    for (size_t index = 0; index < vad.count; ++index) {
+        if (!(vad.segments[index].start_seconds < vad.segments[index].end_seconds)) {
+            std::cerr << "VAD returned an invalid segment\n";
+            std::exit(1);
+        }
+    }
+
+    pitchee_hnr_summary_t summary{};
+    if (pitchee_hnr_analyze(
+            samples.data(),
+            samples.size(),
+            vad.segments,
+            vad.count,
+            nullptr,
+            nullptr,
+            &summary
+        ) != PITCHEE_SUCCESS) {
+        std::cerr << "HNR analysis failed\n";
+        std::exit(1);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -232,6 +291,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     test_options(analyzer, samples, error, sizeof(error));
+    test_vad_hnr_composition(analyzer, samples, error, sizeof(error));
     pitchee_analyzer_destroy(analyzer);
 
     analyzer = create_analyzer(argv[1], 200.0f, error, sizeof(error));

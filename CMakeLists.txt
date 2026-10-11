@@ -42,13 +42,14 @@ endif()
 add_library(pitchee_core ${PITCHEE_LIBRARY_TYPE}
     src/analyzer.cpp
     src/audio.cpp
-    external/hnr/hnr.cpp
+    src/hnr.cpp
     src/json.cpp
     src/naturalness.cpp
     src/model_runtime.cpp
     src/scoring.cpp
     src/spectrum.cpp
     src/vad.cpp
+    src/voice_health.cpp
     src/wav_reader.cpp
 )
 
@@ -199,7 +200,19 @@ if(ANDROID)
 endif()
 
 if(PITCHEE_BUILD_CLI)
-    add_executable(pitchee_cli tools/pitchee_cli.cpp)
+    if(APPLE)
+        enable_language(OBJCXX)
+        add_executable(pitchee_cli
+            tools/pitchee_cli.cpp
+            tools/mac_recorder.mm
+        )
+        target_link_libraries(pitchee_cli PRIVATE
+            "-framework AVFoundation"
+            "-framework Foundation"
+        )
+    else()
+        add_executable(pitchee_cli tools/pitchee_cli.cpp)
+    endif()
     target_link_libraries(pitchee_cli PRIVATE pitchee_core)
 endif()
 
@@ -219,13 +232,13 @@ if(PITCHEE_BUILD_TESTS)
     target_include_directories(pitchee_json_test PRIVATE src)
     add_test(NAME pitchee_json_test COMMAND pitchee_json_test)
 
-    add_executable(pitchee_hnr_test tests/hnr_test.cpp external/hnr/hnr.cpp)
+    add_executable(pitchee_hnr_test tests/hnr_test.cpp src/hnr.cpp)
     target_compile_features(pitchee_hnr_test PRIVATE cxx_std_17)
     target_compile_definitions(pitchee_hnr_test PRIVATE PITCHEE_STATIC=1)
-    target_include_directories(pitchee_hnr_test PRIVATE external/hnr include)
+    target_include_directories(pitchee_hnr_test PRIVATE src include)
     add_test(NAME pitchee_hnr_test COMMAND pitchee_hnr_test)
 
-    add_executable(pitchee_hnr_header_test tests/hnr_header_test.c external/hnr/hnr.cpp)
+    add_executable(pitchee_hnr_header_test tests/hnr_header_test.c src/hnr.cpp)
     target_compile_features(pitchee_hnr_header_test PRIVATE cxx_std_17)
     target_compile_definitions(pitchee_hnr_header_test PRIVATE PITCHEE_STATIC=1)
     target_include_directories(pitchee_hnr_header_test PRIVATE include)

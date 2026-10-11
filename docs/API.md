@@ -239,6 +239,44 @@ pitchee_spectrum_destroy(spectrum);
 The magnitude pointer is valid only during the callback. Input is 16 kHz mono
 Float32 PCM.
 
+## HNR
+
+HNR is not part of `pitchee_analyze_*`. Include `pitchee/hnr.h` explicitly and
+provide VAD intervals yourself:
+
+```c
+#include <pitchee/pitchee.h>
+#include <pitchee/hnr.h>
+
+/* Collect source-timeline intervals from the analyzer VAD callback. */
+pitchee_analyzer_detect_vad(
+    analyzer,
+    pcm_16k_mono,
+    sample_count,
+    16000,
+    1,
+    collect_segment,
+    &segments,
+    error,
+    sizeof(error)
+);
+
+pitchee_hnr_summary_t summary;
+pitchee_hnr_analyze(
+    pcm_16k_mono,
+    sample_count,
+    segments.items,
+    segments.count,
+    NULL,
+    NULL,
+    &summary
+);
+```
+
+HNR accepts 16 kHz mono Float32 PCM and precomputed VAD intervals. It does not
+load models or depend on analyzer. The analyzer only supplies VAD segments, so
+the dependency direction remains one-way.
+
 ## Result schema
 
 The batch result is UTF-8 JSON with these top-level sections:

@@ -29,4 +29,14 @@ typedef enum pitchee_status_t {
     PITCHEE_ERROR_INTERNAL = 7
 } pitchee_status_t;
 
+typedef struct pitchee_vad_segment_t {
+    double start_seconds;
+    double end_seconds;
+} pitchee_vad_segment_t;
+
+typedef void (*pitchee_vad_segment_callback_t)(
+    const pitchee_vad_segment_t* segment,
+    void* user_data
+);
+
 #endif

@@ -1,6 +1,7 @@
 #include "internal.hpp"
 #include "model_runtime.hpp"
 #include "vad.hpp"
+#include "voice_health.hpp"
 #include "wav_reader.hpp"
 
 #include "pitchee/pitchee.h"
@@ -106,6 +107,11 @@ F0Thresholds normalize_f0_thresholds(
 bool valid_score_profile(pitchee_score_profile_t score_profile) {
     return score_profile == PITCHEE_SCORE_PROFILE_FEMINIZATION
         || score_profile == PITCHEE_SCORE_PROFILE_MASCULINIZATION;
+}
+
+bool voice_health_only_mode() {
+    const char* mode = std::getenv("PITCHEE_ANALYSIS_MODE");
+    return mode && std::strcmp(mode, "voice_health_only") == 0;
 }
 
 struct ProgressReporter {
@@ -558,6 +564,51 @@ void pitchee_analyzer_destroy(pitchee_analyzer_t* analyzer) {
     delete analyzer;
 }
 
+pitchee_status_t pitchee_analyzer_detect_vad(
+    pitchee_analyzer_t* analyzer,
+    const float* samples,
+    size_t sample_count,
+    int32_t sample_rate,
+    int32_t channels,
+    pitchee_vad_segment_callback_t segment_callback,
+    void* user_data,
+    char* error_message,
+    size_t error_message_capacity
+) {
+    if (!analyzer || !samples || sample_count == 0 || sample_rate <= 0
+        || channels <= 0) {
+        set_error(error_message, error_message_capacity, "invalid VAD argument");
+        return PITCHEE_ERROR_INVALID_ARGUMENT;
+    }
+    try {
+        const std::vector<float> signal = pitchee::resample_mono(
+            samples,
+            sample_count,
+            channels,
+            sample_rate,
+            pitchee::kSampleRate
+        );
+        if (signal.empty()) throw std::invalid_argument("empty audio");
+        const auto vad = analyzer->vad->detect(signal);
+        if (segment_callback) {
+            for (const auto& segment : vad.segments) {
+                const pitchee_vad_segment_t output{
+                    segment.source_start_seconds,
+                    segment.source_end_seconds,
+                };
+                segment_callback(&output, user_data);
+            }
+        }
+        return PITCHEE_SUCCESS;
+    } catch (const std::invalid_argument& error) {
+        set_error(error_message, error_message_capacity, error.what());
+        return PITCHEE_ERROR_INVALID_ARGUMENT;
+    } catch (const std::exception& error) {
+        set_error(error_message, error_message_capacity, error.what());
+        return status_for_exception(error);
+    }
+}
+
 pitchee_status_t analyze_pcm_impl(
     pitchee_analyzer_t* analyzer,
     const float* samples,
@@ -621,6 +672,59 @@ pitchee_status_t analyze_pcm_impl(
         if (vad.segments.empty()) {
             throw std::runtime_error("Silero VAD detected no speech");
         }
+
+        reporter.progress(PITCHEE_PROGRESS_STAGE_PREPARING_VOICE_HEALTH, 0, 1);
+        const auto voice_health_windows = pitchee::voice_health_windows(signal.size());
+        std::vector<std::vector<float>> voice_health_patches;
+        voice_health_patches.reserve(voice_health_windows.size());
+        for (const auto& window : voice_health_windows) {
+            voice_health_patches.push_back(pitchee::crop_window(signal, window));
+        }
+        reporter.progress(PITCHEE_PROGRESS_STAGE_PREPARING_VOICE_HEALTH, 1, 1);
+        const auto voice_health_embeddings = embed_waveforms(
+            *analyzer->ecapa_frontend,
+            *analyzer->ecapa,
+            voice_health_patches,
+            reporter,
+            PITCHEE_PROGRESS_STAGE_EXTRACTING_VOICE_HEALTH_EMBEDDINGS
+        );
+        reporter.progress(PITCHEE_PROGRESS_STAGE_SCORING_VOICE_HEALTH, 0, 1);
+        const auto voice_health = pitchee::analyze_voice_health(
+            signal,
+            voice_health_embeddings,
+            pitch,
+            vad
+        );
+        reporter.progress(PITCHEE_PROGRESS_STAGE_SCORING_VOICE_HEALTH, 1, 1);
+
+        if (voice_health_only_mode()) {
+            pitchee::AnalysisResult diagnostic;
+            diagnostic.model_version = analyzer->model_version;
+            diagnostic.score_profile = score_profile;
+            diagnostic.source_sample_rate = sample_rate;
+            diagnostic.source_channels = channels;
+            diagnostic.source_seconds = source_seconds;
+            diagnostic.analyzed_seconds = static_cast<double>(signal.size()) / pitchee::kSampleRate;
+            diagnostic.has_f0 = pitch.has_mean_f0;
+            diagnostic.f0_mean_hz = pitch.mean_f0_hz;
+            diagnostic.f0_standard_deviation_hz = pitch.standard_deviation_f0_hz;
+            diagnostic.voiced_frame_count = pitch.voiced_frame_count;
+            diagnostic.voiced_window_count = pitch.voiced_window_count;
+            diagnostic.f0_windows = pitch.windows;
+            diagnostic.voice_health = voice_health;
+            diagnostic.vad = vad;
+            const std::string diagnostic_json = pitchee::result_to_json(diagnostic);
+            auto* diagnostic_output = new char[diagnostic_json.size() + 1];
+            std::memcpy(
+                diagnostic_output,
+                diagnostic_json.c_str(),
+                diagnostic_json.size() + 1
+            );
+            *out_json = diagnostic_output;
+            reporter.progress(PITCHEE_PROGRESS_STAGE_COMPLETED, 1, 1);
+            return PITCHEE_SUCCESS;
+        }
+
         reporter.progress(PITCHEE_PROGRESS_STAGE_PREPARING_VFP_WINDOWS, 0, 1);
         const auto source_windows = pitchee::native_speech_windows(
             signal.size(),
@@ -762,17 +866,8 @@ pitchee_status_t analyze_pcm_impl(
         result.voiced_frame_count = pitch.voiced_frame_count;
         result.voiced_window_count = pitch.voiced_window_count;
         result.f0_windows = pitch.windows;
-        // Reuse the existing filtered VAD on the original PCM timeline. HNR
-        // remains external and does not load a detector or use F0 confidence.
-        std::vector<pitchee_hnr_vad_segment_t> hnr_vad_segments;
-        hnr_vad_segments.reserve(vad.segments.size());
-        for (const auto& segment : vad.segments) {
-            hnr_vad_segments.push_back({segment.source_start_seconds, segment.source_end_seconds});
-        }
-        result.voice_quality = pitchee::analyze_hnr(
-            signal.data(), signal.size(), hnr_vad_segments.data(), hnr_vad_segments.size()
-        );
         result.naturalness_score = analyzer->naturalness->score(features);
+        result.voice_health = voice_health;
         result.score = pitchee::calculate_composite_score(
             score_profile,
             result.vfp_standard_score,

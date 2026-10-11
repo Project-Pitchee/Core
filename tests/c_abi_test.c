@@ -1,5 +1,6 @@
 #include "pitchee/pitchee.h"
 #include "pitchee/spectrum.h"
+#include "pitchee/hnr.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -50,6 +51,21 @@ int main(void) {
         return 1;
     }
 
+    if (pitchee_analyzer_detect_vad(
+            NULL,
+            NULL,
+            0,
+            16000,
+            1,
+            NULL,
+            NULL,
+            NULL,
+            0
+        ) != PITCHEE_ERROR_INVALID_ARGUMENT) {
+        fprintf(stderr, "unexpected VAD API status\n");
+        return 1;
+    }
+
     if (pitchee_realtime_f0_create(
             NULL,
             5120,
@@ -79,7 +95,7 @@ int main(void) {
         if (pitchee_hnr_analyze(silence, 64, NULL, 0, NULL, NULL, &summary) != PITCHEE_SUCCESS
             || summary.has_hnr != 0 || summary.hnr_window_count != 0
             || summary.window_seconds != 0.04) {
-            fprintf(stderr, "unexpected standalone HNR status\n");
+            fprintf(stderr, "unexpected HNR status\n");
             return 1;
         }
     }

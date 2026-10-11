@@ -11,7 +11,7 @@
 - 0.05-second SwiftF0 pitch timeline
 - Realtime chunk-buffered SwiftF0 frames
 - Streaming STFT spectrum frames and spectral summary metrics
-- External HNR autocorrelation with independent 40 ms windows / 10 ms hops,
+- HNR autocorrelation with independent 40 ms windows / 10 ms hops,
   gated by caller-supplied existing VAD intervals on the original PCM timeline
 - Composite score
 
@@ -43,9 +43,11 @@ side. Timeline geometry and visual colors belong to the UI layer, not the core.
 ## ABI rules
 
 - Keep `pitchee.h` C-compatible.
-- HNR has a standalone C ABI in `include/pitchee/hnr.h`, included by the
-  `pitchee.h` umbrella. Its implementation lives in `external/hnr/` and does
-  not load a VAD or F0 model; callers provide already-computed VAD segments.
+- HNR has its own C ABI in `include/pitchee/hnr.h` and is not included by the
+  `pitchee.h` umbrella. Its implementation lives in `src/hnr.cpp`; it does not
+  load a VAD or F0 model, so callers provide already-computed VAD segments.
+- `pitchee_analyzer_detect_vad()` supplies VAD intervals for composition with
+  HNR. The analyzer does not call HNR and the batch JSON does not contain HNR.
 - Never expose `std::string`, `std::vector`, or exceptions across the ABI.
 - Return errors through `pitchee_status_t` and a fixed caller buffer.
 - Return dynamic results as UTF-8 JSON or opaque handles.

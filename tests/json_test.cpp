@@ -55,12 +55,6 @@ int main() {
     result.voiced_window_count = 2;
     result.f0_windows.push_back({0.0, 0.1, false, 0.0});
     result.f0_windows.push_back({0.1, 0.2, true, 180.0});
-    result.voice_quality.hnr_db = -3.5;
-    result.voice_quality.hnr_window_count = 1;
-    result.voice_quality.hnr_std_db = 0.0;
-    result.voice_quality.windows.push_back({0.0, 0.04, std::nullopt});
-    result.voice_quality.windows.push_back({0.01, 0.05, -3.5});
-    result.voice_quality.windows.push_back({0.02, 0.06, std::nullopt});
 
     const std::string json = pitchee::result_to_json(result);
     require(contains(json, "\"schema_version\":4"), "schema version");
@@ -71,17 +65,7 @@ int main() {
     require(!contains(json, "\"models\""), "models removed");
     require(!contains(json, "raw_female_score"), "raw score removed");
     require(contains(json, "\"f0\":{\"window_seconds\":0.05"), "f0 section");
-    require(contains(json, "\"voice_quality\":{\"algorithm\":\"autocorr-praat-v1\","
-                          "\"hnr_db\":-3.5,\"hnr_window_count\":1,\"hnr_std_db\":0,"
-                          "\"window_seconds\":0.04,"),
-            "versioned voice quality preserves negative HNR and its independent duration");
-    require(contains(json, "\"hnr_db\":null}"), "unavailable window HNR is serialized as null");
-    require(contains(json, "\"hnr_db\":-3.5}"), "available window HNR is serialized");
-    result.voice_quality.hnr_db.reset();
-    result.voice_quality.hnr_std_db.reset();
-    result.voice_quality.hnr_window_count = 0;
-    require(contains(pitchee::result_to_json(result), "\"hnr_db\":null,\"hnr_window_count\":0,\"hnr_std_db\":null"),
-            "an unavailable aggregate propagates null mean and standard deviation");
+    require(!contains(json, "\"voice_quality\""), "HNR must remain external to analysis JSON");
     require(contains(json, "\"vfp\":{\"vfp_standard_score\":12.5"), "vfp section");
     require(
         contains(json, "\"naturalness\":{\"score\":67.5"),
@@ -95,6 +79,7 @@ int main() {
         contains(json, "\"vfp_standard_score\":12.5"),
         "window vfp score"
     );
+    require(contains(json, "\"voice_health\":{\"score\":"), "voice health section");
     result.model_version = "test\"\\\n";
     require(contains(pitchee::result_to_json(result),
                      "\"model_version\":\"test\\\"\\\\\\n\""),

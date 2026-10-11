@@ -8,10 +8,7 @@ extern "C" {
 #endif
 
 /* Existing VAD intervals on the original 16 kHz PCM timeline, in seconds. */
-typedef struct pitchee_hnr_vad_segment_t {
-    double start_seconds;
-    double end_seconds;
-} pitchee_hnr_vad_segment_t;
+typedef pitchee_vad_segment_t pitchee_hnr_vad_segment_t;
 
 typedef struct pitchee_hnr_window_t {
     double start_seconds;

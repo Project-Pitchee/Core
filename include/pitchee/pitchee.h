@@ -5,7 +5,6 @@
 #include <stdint.h>
 
 #include "common.h"
-#include "hnr.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -34,7 +33,10 @@ typedef enum pitchee_progress_stage_t {
     PITCHEE_PROGRESS_STAGE_SCORING_NATURALNESS_WINDOWS = 9,
     PITCHEE_PROGRESS_STAGE_CALCULATING_SCORES = 10,
     PITCHEE_PROGRESS_STAGE_SERIALIZING_RESULT = 11,
-    PITCHEE_PROGRESS_STAGE_COMPLETED = 12
+    PITCHEE_PROGRESS_STAGE_COMPLETED = 12,
+    PITCHEE_PROGRESS_STAGE_PREPARING_VOICE_HEALTH = 13,
+    PITCHEE_PROGRESS_STAGE_EXTRACTING_VOICE_HEALTH_EMBEDDINGS = 14,
+    PITCHEE_PROGRESS_STAGE_SCORING_VOICE_HEALTH = 15
 } pitchee_progress_stage_t;
 
 typedef struct pitchee_progress_t {
@@ -139,6 +141,25 @@ PITCHEE_API pitchee_status_t pitchee_analyzer_create(
 );
 
 PITCHEE_API void pitchee_analyzer_destroy(pitchee_analyzer_t* analyzer);
+
+/*
+ * Detect VAD intervals without running pitch, VFP, naturalness, or HNR.
+ * Input may be any mono/stereo float32 PCM; Core resamples it to 16 kHz.
+ * Segments are reported on the original input timeline. Callbacks run
+ * synchronously on the calling thread and the segment pointer is borrowed only
+ * for that callback.
+ */
+PITCHEE_API pitchee_status_t pitchee_analyzer_detect_vad(
+    pitchee_analyzer_t* analyzer,
+    const float* samples,
+    size_t sample_count,
+    int32_t sample_rate,
+    int32_t channels,
+    pitchee_vad_segment_callback_t segment_callback,
+    void* user_data,
+    char* error_message,
+    size_t error_message_capacity
+);
 
 /*
  * Samples must be mono or interleaved float32 PCM in [-1, 1].

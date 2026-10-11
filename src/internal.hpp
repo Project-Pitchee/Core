@@ -1,9 +1,8 @@
 #ifndef PITCHEE_INTERNAL_HPP
 #define PITCHEE_INTERNAL_HPP
 
-#include "../external/hnr/hnr.hpp"
-
 #include <cstdint>
+#include <array>
 #include <filesystem>
 #include <limits>
 #include <memory>
@@ -71,6 +70,14 @@ struct SampleWindow {
     size_t length = 0;
 };
 
+struct VoiceHealthResult {
+    double disorder_probability = 0.0;
+    double health_score = 0.0;
+    bool disordered = false;
+    std::array<double, 14> acoustic{};
+    std::vector<double> ecapa_features;
+};
+
 struct AnalysisResult {
     std::string model_version = "unknown";
     int score_profile = 0;
@@ -90,8 +97,8 @@ struct AnalysisResult {
     int voiced_frame_count = 0;
     int voiced_window_count = 0;
     std::vector<F0Window> f0_windows;
-    VoiceQualityResult voice_quality;
     double naturalness_score = 0.0;
+    VoiceHealthResult voice_health;
     CompositeScore score;
     VadResult vad;
 };
