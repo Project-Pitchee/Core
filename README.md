@@ -181,7 +181,7 @@ macOS 也可以直接从命令行录音并分析。录音使用系统当前的�
 录音模式需要系统安装 `ffmpeg`，第一次运行时 macOS 会请求麦克风权限。录音先以
 macOS 使用 Core 内置的 AVAudioEngine 直接采集 Float32 PCM，Core 再在分析阶段
 统一转换到 16 kHz；不再启动外部 ffmpeg 进程，避免实时管道和重采样产生卡顿或
-电子声。输出包括嗓音健康分、异常概率、平均 F0 和现有综合分。
+电子声。输出包括平均 F0 和现有综合分。
 
 CLI 支持 PCM16、PCM32 和 Float32 WAV。M4A、MP3、AAC 等压缩格式应通过
 AVFoundation、MediaCodec 或桌面解码器转换成 Float32 PCM。
@@ -480,7 +480,7 @@ HNR 不依赖 analyzer，评分流水线也不依赖 HNR。
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 3,
   "model_version": "2026-09",
   "score_profile": "feminization",
   "audio": {
@@ -533,28 +533,6 @@ HNR 不依赖 analyzer，评分流水线也不依赖 HNR。
       {"start_seconds": 3.733, "end_seconds": 5.248, "score": 80.8774}
     ]
   },
-  "voice_health": {
-    "score": 86.0704,
-    "disorder_probability": 13.9296,
-    "threshold": 59.8767,
-    "label": "healthy",
-    "features": {
-      "hnr_db": 11.7267,
-      "cpps_db": 100.3279,
-      "jitter_local": 0.1054,
-      "jitter_rap": 0.0659,
-      "jitter_ppq5": 0.0925,
-      "shimmer_local": 0.2114,
-      "shimmer_apq3": 0.0609,
-      "shimmer_apq5": 0.1121,
-      "f0_median": 162.2463,
-      "f0_iqr": 21.6768,
-      "f0_cv": 0.108,
-      "voiced_fraction": 0.4803,
-      "intensity_median": -36.959,
-      "intensity_iqr": 15.8411
-    }
-  },
   "composite": {
     "base_score": 12.1184,
     "final_score": 12.1184,
@@ -570,7 +548,7 @@ HNR 不依赖 analyzer，评分流水线也不依赖 HNR。
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `schema_version` | 整数 | JSON 数据契约版本，当前为 `4`。 |
+| `schema_version` | 整数 | JSON 数据契约版本，当前为 `3`。 |
 | `model_version` | 字符串 | 模型组合版本。当前为 `2026-09`。模型更新后应同步更新。 |
 | `score_profile` | 字符串 | 当前评分标准，`feminization` 或 `masculinization`。 |
 

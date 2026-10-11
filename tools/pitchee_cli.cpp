@@ -59,14 +59,6 @@ bool json_number(const std::string& json, const std::string& key, double& value)
     return end != start;
 }
 
-std::string json_string(const std::string& json, const std::string& key) {
-    const size_t position = json.find(key);
-    if (position == std::string::npos) return {};
-    const size_t start = position + key.size();
-    const size_t end = json.find('"', start);
-    return end == std::string::npos ? std::string{} : json.substr(start, end - start);
-}
-
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -178,18 +170,11 @@ int main(int argc, char** argv) {
         return static_cast<int>(status);
     }
     if (record_mode) {
-        double health_score = 0.0;
-        double disorder_probability = 0.0;
         double f0_mean = 0.0;
         double composite = 0.0;
-        json_number(json, "\"voice_health\":{\"score\":", health_score);
-        json_number(json, "\"disorder_probability\":", disorder_probability);
         json_number(json, "\"mean_hz\":", f0_mean);
         json_number(json, "\"final_score\":", composite);
-        const std::string health_label = json_string(json, "\"label\":\"");
         std::cout << "recording: " << audio_path << "\n";
-        std::cout << "voice_health: " << health_score << "/100 (" << health_label << ")\n";
-        std::cout << "disorder_probability: " << disorder_probability << "%\n";
         std::cout << "f0_mean_hz: " << f0_mean << "\n";
         std::cout << "composite_score: " << composite << "\n";
     } else {

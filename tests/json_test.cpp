@@ -57,7 +57,7 @@ int main() {
     result.f0_windows.push_back({0.1, 0.2, true, 180.0});
 
     const std::string json = pitchee::result_to_json(result);
-    require(contains(json, "\"schema_version\":4"), "schema version");
+    require(contains(json, "\"schema_version\":3"), "schema version");
     require(contains(json, "\"model_version\":\"test-2.3+local\""),
             "result version must come from the selected model directory");
     require(contains(json, "\"score_profile\":\"feminization\""),
@@ -79,7 +79,6 @@ int main() {
         contains(json, "\"vfp_standard_score\":12.5"),
         "window vfp score"
     );
-    require(contains(json, "\"voice_health\":{\"score\":"), "voice health section");
     result.model_version = "test\"\\\n";
     require(contains(pitchee::result_to_json(result),
                      "\"model_version\":\"test\\\"\\\\\\n\""),

@@ -1,9 +1,6 @@
 #include "internal.hpp"
 
-#include "voice_health_model.hpp"
-
 #include <cmath>
-#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <iterator>
@@ -160,39 +157,6 @@ std::string result_to_json(const AnalysisResult& result) {
                << "}";
     }
     output << "]},";
-
-    output << "\"voice_health\":{";
-    output << "\"score\":" << number(result.voice_health.health_score) << ",";
-    output << "\"disorder_probability\":"
-           << number(result.voice_health.disorder_probability * 100.0) << ",";
-    output << "\"threshold\":"
-           << number(kVoiceHealthDecisionThreshold * 100.0) << ",";
-    output << "\"label\":\""
-           << (result.voice_health.disordered ? "disordered" : "healthy")
-           << "\",";
-    output << "\"features\":{";
-    static const char* names[] = {
-        "hnr_db", "cpps_db", "jitter_local", "jitter_rap", "jitter_ppq5",
-        "shimmer_local", "shimmer_apq3", "shimmer_apq5", "f0_median",
-        "f0_iqr", "f0_cv", "voiced_fraction", "intensity_median",
-        "intensity_iqr",
-    };
-    for (size_t index = 0; index < result.voice_health.acoustic.size(); ++index) {
-        if (index) output << ",";
-        output << "\"" << names[index] << "\":"
-               << number(result.voice_health.acoustic[index]);
-    }
-    output << "}";
-    const char* debug_features = std::getenv("PITCHEE_DEBUG_VOICE_HEALTH");
-    if (debug_features && *debug_features) {
-        output << ",\"ecapa_features\":[";
-        for (size_t index = 0; index < result.voice_health.ecapa_features.size(); ++index) {
-            if (index) output << ",";
-            output << number(result.voice_health.ecapa_features[index]);
-        }
-        output << "]";
-    }
-    output << "},";
 
     output << "\"composite\":{";
     output << "\"base_score\":" << number(result.score.base_score) << ",";

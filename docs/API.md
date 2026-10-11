@@ -283,7 +283,7 @@ The batch result is UTF-8 JSON with these top-level sections:
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 3,
   "model_version": "2026-10-f1",
   "score_profile": "feminization",
   "audio": {},
