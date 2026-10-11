@@ -224,19 +224,33 @@ reuses the analyzer's VAD, SwiftF0 and ECAPA models, then applies the embedded
 Logistic head from `voice_health_model.hpp`. No extra model file is needed.
 Android uses the same ncnn-backed VAD, SwiftF0 and ECAPA path.
 
-The same ECAPA/acoustic feature vector, plus the raw Logistic probability as a
-399th feature, is passed through a 384-component Nystroem-RBF map and then two
-Ridge heads:
+The separate v2 entry point returns only the two continuous severity heads and
+does not return the health result:
+
+```c
+pitchee_voice_severity_result_t severity = {0};
+pitchee_analysis_run_voice_health_v2_wav_file(
+    analyzer,
+    "voice.wav",
+    NULL,
+    NULL,
+    &severity,
+    error,
+    sizeof(error)
+);
+```
+
+v2 passes the 398 ECAPA/acoustic features through a 384-component
+Nystroem-RBF map and then two Ridge heads:
 
 ```text
-health.severity.grbas_grade      -> clamped to 0-3
-health.severity.cape_v_severity  -> clamped to 0-100
+severity.grbas_grade      -> clamped to 0-3
+severity.cape_v_severity  -> clamped to 0-100
 ```
 
 The Nystroem basis and Ridge coefficients are compiled into
-`voice_severity_model.hpp`. This is a shared-feature dual-head model: one
-feature extraction pass, one Logistic head, and two kernel-Ridge regression
-heads.
+`voice_severity_model.hpp`. Android uses the same ncnn-backed VAD, SwiftF0 and
+ECAPA path and requires no additional model file.
 
 The discriminant trained by the offline experiment was `0.4135834447`. Core
 applies a monotonic piecewise-linear mapping so that the trained boundary lands

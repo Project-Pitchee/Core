@@ -13,7 +13,8 @@ VoiceHealthResult analyze_voice_health(
     const std::vector<float>& signal,
     const std::vector<std::vector<float>>& embeddings,
     const PitchResult& pitch,
-    const VadResult& vad
+    const VadResult& vad,
+    bool include_severity = false
 );
 
 }  // namespace pitchee

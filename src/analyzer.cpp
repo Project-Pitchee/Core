@@ -611,8 +611,9 @@ pitchee_status_t run_voice_health_pcm_impl(
     size_t sample_count,
     int32_t sample_rate,
     int32_t channels,
+    bool include_severity,
     const ProgressReporter& reporter,
-    pitchee_voice_health_result_t* out_result,
+    pitchee::VoiceHealthResult* out_result,
     char* error_message,
     size_t error_message_capacity
 ) {
@@ -680,32 +681,12 @@ pitchee_status_t run_voice_health_pcm_impl(
             signal,
             embeddings,
             pitch,
-            vad
+            vad,
+            include_severity
         );
         reporter.progress(PITCHEE_PROGRESS_STAGE_SCORING_VOICE_HEALTH, 1, 1);
 
-        out_result->health_score = health.health_score;
-        out_result->disorder_probability = health.disorder_probability;
-        out_result->decision_threshold = pitchee::kVoiceHealthHealthScoreThreshold;
-        out_result->is_disordered = health.disordered ? 1 : 0;
-        out_result->features = {
-            health.acoustic[0],
-            health.acoustic[1],
-            health.acoustic[2],
-            health.acoustic[3],
-            health.acoustic[4],
-            health.acoustic[5],
-            health.acoustic[6],
-            health.acoustic[7],
-            health.acoustic[8],
-            health.acoustic[9],
-            health.acoustic[10],
-            health.acoustic[11],
-            health.acoustic[12],
-            health.acoustic[13],
-        };
-        out_result->severity.grbas_grade = health.grbas_grade;
-        out_result->severity.cape_v_severity = health.cape_v_severity;
+        *out_result = health;
         reporter.progress(PITCHEE_PROGRESS_STAGE_COMPLETED, 1, 1);
         return PITCHEE_SUCCESS;
     } catch (const std::invalid_argument& error) {
@@ -715,6 +696,32 @@ pitchee_status_t run_voice_health_pcm_impl(
         set_error(error_message, error_message_capacity, error.what());
         return status_for_exception(error);
     }
+}
+
+void copy_voice_health_result(
+    const pitchee::VoiceHealthResult& health,
+    pitchee_voice_health_result_t* out_result
+) {
+    out_result->health_score = health.health_score;
+    out_result->disorder_probability = health.disorder_probability;
+    out_result->decision_threshold = pitchee::kVoiceHealthHealthScoreThreshold;
+    out_result->is_disordered = health.disordered ? 1 : 0;
+    out_result->features = {
+        health.acoustic[0],
+        health.acoustic[1],
+        health.acoustic[2],
+        health.acoustic[3],
+        health.acoustic[4],
+        health.acoustic[5],
+        health.acoustic[6],
+        health.acoustic[7],
+        health.acoustic[8],
+        health.acoustic[9],
+        health.acoustic[10],
+        health.acoustic[11],
+        health.acoustic[12],
+        health.acoustic[13],
+    };
 }
 
 pitchee_status_t analyze_pcm_impl(
@@ -1057,17 +1064,22 @@ pitchee_status_t pitchee_analysis_run_voice_health(
         progress_callback,
         user_data,
     };
-    return run_voice_health_pcm_impl(
+    pitchee::VoiceHealthResult health;
+    const pitchee_status_t status = run_voice_health_pcm_impl(
         analyzer,
         samples,
         sample_count,
         sample_rate,
         channels,
+        false,
         reporter,
-        out_result,
+        &health,
         error_message,
         error_message_capacity
     );
+    if (status != PITCHEE_SUCCESS) return status;
+    copy_voice_health_result(health, out_result);
+    return PITCHEE_SUCCESS;
 }
 
 pitchee_status_t pitchee_analysis_run_voice_health_wav_file(
@@ -1091,17 +1103,104 @@ pitchee_status_t pitchee_analysis_run_voice_health_wav_file(
         reporter.progress(PITCHEE_PROGRESS_STAGE_LOADING_AUDIO, 0, 1);
         const pitchee::WavData wav = pitchee::read_wav(wav_path);
         reporter.progress(PITCHEE_PROGRESS_STAGE_LOADING_AUDIO, 1, 1);
-        return run_voice_health_pcm_impl(
+        pitchee::VoiceHealthResult health;
+        const pitchee_status_t status = run_voice_health_pcm_impl(
             analyzer,
             wav.samples.data(),
             wav.samples.size(),
             wav.sample_rate,
             wav.channels,
+            false,
             reporter,
-            out_result,
+            &health,
             error_message,
             error_message_capacity
         );
+        if (status != PITCHEE_SUCCESS) return status;
+        copy_voice_health_result(health, out_result);
+        return PITCHEE_SUCCESS;
+    } catch (const std::invalid_argument& error) {
+        set_error(error_message, error_message_capacity, error.what());
+        return PITCHEE_ERROR_INVALID_ARGUMENT;
+    } catch (const std::exception& error) {
+        set_error(error_message, error_message_capacity, error.what());
+        return status_for_exception(error);
+    }
+}
+
+pitchee_status_t pitchee_analysis_run_voice_health_v2(
+    pitchee_analyzer_t* analyzer,
+    const float* samples,
+    size_t sample_count,
+    int32_t sample_rate,
+    int32_t channels,
+    pitchee_progress_callback_t progress_callback,
+    void* user_data,
+    pitchee_voice_severity_result_t* out_result,
+    char* error_message,
+    size_t error_message_capacity
+) {
+    if (!out_result) {
+        set_error(error_message, error_message_capacity, "invalid voice severity result");
+        return PITCHEE_ERROR_INVALID_ARGUMENT;
+    }
+    *out_result = {};
+    const ProgressReporter reporter{progress_callback, user_data};
+    pitchee::VoiceHealthResult health;
+    const pitchee_status_t status = run_voice_health_pcm_impl(
+        analyzer,
+        samples,
+        sample_count,
+        sample_rate,
+        channels,
+        true,
+        reporter,
+        &health,
+        error_message,
+        error_message_capacity
+    );
+    if (status != PITCHEE_SUCCESS) return status;
+    out_result->grbas_grade = health.grbas_grade;
+    out_result->cape_v_severity = health.cape_v_severity;
+    return PITCHEE_SUCCESS;
+}
+
+pitchee_status_t pitchee_analysis_run_voice_health_v2_wav_file(
+    pitchee_analyzer_t* analyzer,
+    const char* wav_path,
+    pitchee_progress_callback_t progress_callback,
+    void* user_data,
+    pitchee_voice_severity_result_t* out_result,
+    char* error_message,
+    size_t error_message_capacity
+) {
+    if (!analyzer || !wav_path || !out_result) {
+        set_error(error_message, error_message_capacity, "invalid voice severity WAV argument");
+        return PITCHEE_ERROR_INVALID_ARGUMENT;
+    }
+    *out_result = {};
+    const ProgressReporter reporter{progress_callback, user_data};
+    try {
+        reporter.progress(PITCHEE_PROGRESS_STAGE_LOADING_AUDIO, 0, 1);
+        const pitchee::WavData wav = pitchee::read_wav(wav_path);
+        reporter.progress(PITCHEE_PROGRESS_STAGE_LOADING_AUDIO, 1, 1);
+        pitchee::VoiceHealthResult health;
+        const pitchee_status_t status = run_voice_health_pcm_impl(
+            analyzer,
+            wav.samples.data(),
+            wav.samples.size(),
+            wav.sample_rate,
+            wav.channels,
+            true,
+            reporter,
+            &health,
+            error_message,
+            error_message_capacity
+        );
+        if (status != PITCHEE_SUCCESS) return status;
+        out_result->grbas_grade = health.grbas_grade;
+        out_result->cape_v_severity = health.cape_v_severity;
+        return PITCHEE_SUCCESS;
     } catch (const std::invalid_argument& error) {
         set_error(error_message, error_message_capacity, error.what());
         return PITCHEE_ERROR_INVALID_ARGUMENT;

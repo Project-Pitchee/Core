@@ -151,7 +151,6 @@ typedef struct pitchee_voice_health_result_t {
     double decision_threshold;
     int32_t is_disordered;
     pitchee_voice_health_features_t features;
-    pitchee_voice_severity_result_t severity;
 } pitchee_voice_health_result_t;
 
 PITCHEE_API const char* pitchee_version(void);
@@ -248,6 +247,29 @@ PITCHEE_API pitchee_status_t pitchee_analysis_run_voice_health_wav_file(
     pitchee_progress_callback_t progress_callback,
     void* user_data,
     pitchee_voice_health_result_t* out_result,
+    char* error_message,
+    size_t error_message_capacity
+);
+
+PITCHEE_API pitchee_status_t pitchee_analysis_run_voice_health_v2(
+    pitchee_analyzer_t* analyzer,
+    const float* samples,
+    size_t sample_count,
+    int32_t sample_rate,
+    int32_t channels,
+    pitchee_progress_callback_t progress_callback,
+    void* user_data,
+    pitchee_voice_severity_result_t* out_result,
+    char* error_message,
+    size_t error_message_capacity
+);
+
+PITCHEE_API pitchee_status_t pitchee_analysis_run_voice_health_v2_wav_file(
+    pitchee_analyzer_t* analyzer,
+    const char* wav_path,
+    pitchee_progress_callback_t progress_callback,
+    void* user_data,
+    pitchee_voice_severity_result_t* out_result,
     char* error_message,
     size_t error_message_capacity
 );

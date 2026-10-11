@@ -412,7 +412,8 @@ VoiceHealthResult analyze_voice_health(
     const std::vector<float>& signal,
     const std::vector<std::vector<float>>& embeddings,
     const PitchResult& pitch,
-    const VadResult& vad
+    const VadResult& vad,
+    bool include_severity
 ) {
     VoiceHealthResult result;
 
@@ -491,35 +492,36 @@ VoiceHealthResult analyze_voice_health(
     result.health_score = 100.0 * (1.0 - result.disorder_probability);
     result.disordered = result.health_score < kVoiceHealthHealthScoreThreshold;
 
-    std::vector<double> severity_features = result.ecapa_features;
-    severity_features.insert(
-        severity_features.end(),
-        result.acoustic.begin(),
-        result.acoustic.end()
-    );
-    severity_features.push_back(raw_disorder_probability);
-    result.grbas_grade = std::max(
-        kGrbasGradeMinimum,
-        std::min(
-            kGrbasGradeMaximum,
-            ridge_score(
-                severity_features,
-                kGrbasGradeCoefficients,
-                kGrbasGradeIntercept
+    if (include_severity) {
+        std::vector<double> severity_features = result.ecapa_features;
+        severity_features.insert(
+            severity_features.end(),
+            result.acoustic.begin(),
+            result.acoustic.end()
+        );
+        result.grbas_grade = std::max(
+            kGrbasGradeMinimum,
+            std::min(
+                kGrbasGradeMaximum,
+                ridge_score(
+                    severity_features,
+                    kGrbasGradeCoefficients,
+                    kGrbasGradeIntercept
+                )
             )
-        )
-    );
-    result.cape_v_severity = std::max(
-        kCapeVSeverityMinimum,
-        std::min(
-            kCapeVSeverityMaximum,
-            ridge_score(
-                severity_features,
-                kCapeVSeverityCoefficients,
-                kCapeVSeverityIntercept
+        );
+        result.cape_v_severity = std::max(
+            kCapeVSeverityMinimum,
+            std::min(
+                kCapeVSeverityMaximum,
+                ridge_score(
+                    severity_features,
+                    kCapeVSeverityCoefficients,
+                    kCapeVSeverityIntercept
+                )
             )
-        )
-    );
+        );
+    }
     return result;
 }
 

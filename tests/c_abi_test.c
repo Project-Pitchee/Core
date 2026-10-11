@@ -13,6 +13,8 @@ static void progress_callback(const pitchee_progress_t* progress, void* user_dat
 int main(void) {
     (void)&pitchee_analysis_run_voice_health;
     (void)&pitchee_analysis_run_voice_health_wav_file;
+    (void)&pitchee_analysis_run_voice_health_v2;
+    (void)&pitchee_analysis_run_voice_health_v2_wav_file;
 
     if (strcmp(pitchee_version(), "0.5.0") != 0) {
         fprintf(stderr, "unexpected version\n");

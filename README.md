@@ -161,6 +161,7 @@ unzip /tmp/onnxruntime-ios.zip -d third_party/onnxruntime-ios
 ```bash
 ./build-macos/pitchee_cli ./models /path/to/audio.wav feminization
 ./build-macos/pitchee_cli ./models voice-health /path/to/audio.wav
+./build-macos/pitchee_cli ./models voice-severity /path/to/audio.wav
 ```
 
 第三个参数必须显式指定 `feminization` 或 `masculinization`。
@@ -192,16 +193,17 @@ health_score <  30 -> 嘶哑
 `decision_threshold` 因此使用 0-100 健康分尺度，值为 `30`。Android 上 VAD、
 SwiftF0 和 ECAPA 仍走既有 ncnn 后端，因此不需要额外 ncnn 转换步骤。
 
-同一组 ECAPA 和声学特征，再加上 Logistic 原始异常概率作为第 399 维，
-会输入两个 Nystroem-RBF Ridge 连续严重度头：
+`pitchee_analysis_run_voice_health_v2()` 是独立严重度入口，不返回健康头。
+v2 使用同一组 398 维 ECAPA 和声学特征，并返回两个 Nystroem-RBF Ridge
+连续严重度结果：
 
 ```text
-severity.grbas_grade      0-3
-severity.cape_v_severity  0-100
+grbas_grade      0-3
+cape_v_severity  0-100
 ```
 
-Ridge 核基和系数编译进 `voice_severity_model.hpp`，因此三个头共享一次特征提取，
-Android 同样不需要额外的 ncnn 模型文件。
+Ridge 核基和系数编译进 `voice_severity_model.hpp`，Android 不需要额外的
+ncnn 模型文件。
 
 macOS 也可以直接从命令行录音并分析。录音使用系统当前的默认输入设备，可在
 “系统设置 → 声音 → 输入”中切换：
@@ -211,7 +213,6 @@ macOS 也可以直接从命令行录音并分析。录音使用系统当前的�
 ./build-macos/pitchee_cli ./models record 8 feminization /tmp/voice.wav
 ```
 
-录音模式需要系统安装 `ffmpeg`，第一次运行时 macOS 会请求麦克风权限。录音先以
 macOS 使用 Core 内置的 AVAudioEngine 直接采集 Float32 PCM，Core 再在分析阶段
 统一转换到 16 kHz；不再启动外部 ffmpeg 进程，避免实时管道和重采样产生卡顿或
 电子声。输出包括平均 F0 和现有综合分。

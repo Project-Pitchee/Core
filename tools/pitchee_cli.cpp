@@ -65,18 +65,21 @@ int main(int argc, char** argv) {
     const bool record_mode = argc >= 5 && std::strcmp(argv[2], "record") == 0;
     const bool voice_health_mode = argc == 4
         && std::strcmp(argv[2], "voice-health") == 0;
-    if ((!record_mode && !voice_health_mode && argc != 4)
+    const bool voice_severity_mode = argc == 4
+        && std::strcmp(argv[2], "voice-severity") == 0;
+    if ((!record_mode && !voice_health_mode && !voice_severity_mode && argc != 4)
         || (record_mode && argc != 5 && argc != 6)) {
         std::cerr << "usage: pitchee_cli <model-directory> <audio.wav> "
                      "<feminization|masculinization>\n"
                      "       pitchee_cli <model-directory> record <seconds> "
                      "<feminization|masculinization> [output.wav]\n"
-                     "       pitchee_cli <model-directory> voice-health <audio.wav>\n";
+                     "       pitchee_cli <model-directory> voice-health <audio.wav>\n"
+                     "       pitchee_cli <model-directory> voice-severity <audio.wav>\n";
         return 2;
     }
 
     pitchee_score_profile_t score_profile;
-    if (!voice_health_mode) {
+    if (!voice_health_mode && !voice_severity_mode) {
         const char* profile_argument = record_mode ? argv[4] : argv[3];
         if (!parse_profile(profile_argument, score_profile)) {
             std::cerr << "invalid score profile: " << profile_argument << "\n";
@@ -84,7 +87,9 @@ int main(int argc, char** argv) {
         }
     }
 
-    std::string audio_path = record_mode || voice_health_mode ? std::string{} : argv[2];
+    std::string audio_path = record_mode || voice_health_mode || voice_severity_mode
+        ? std::string{}
+        : argv[2];
     if (record_mode) {
         char* duration_end = nullptr;
         const double duration = std::strtod(argv[3], &duration_end);
@@ -183,9 +188,28 @@ int main(int argc, char** argv) {
                   << health.decision_threshold << "\n";
         std::cout << "label: "
                   << (health.is_disordered ? "disordered" : "healthy") << "\n";
-        std::cout << "grbas_grade: " << health.severity.grbas_grade << "\n";
-        std::cout << "cape_v_severity: "
-                  << health.severity.cape_v_severity << "\n";
+        pitchee_analyzer_destroy(analyzer);
+        return 0;
+    }
+
+    if (voice_severity_mode) {
+        pitchee_voice_severity_result_t severity{};
+        status = pitchee_analysis_run_voice_health_v2_wav_file(
+            analyzer,
+            argv[3],
+            show_progress && *show_progress ? progress_callback : nullptr,
+            nullptr,
+            &severity,
+            error,
+            sizeof(error)
+        );
+        if (status != PITCHEE_SUCCESS) {
+            std::cerr << "voice-severity analysis failed: " << error << "\n";
+            pitchee_analyzer_destroy(analyzer);
+            return static_cast<int>(status);
+        }
+        std::cout << "grbas_grade: " << severity.grbas_grade << "\n";
+        std::cout << "cape_v_severity: " << severity.cape_v_severity << "\n";
         pitchee_analyzer_destroy(analyzer);
         return 0;
     }
