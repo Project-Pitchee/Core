@@ -162,6 +162,8 @@ unzip /tmp/onnxruntime-ios.zip -d third_party/onnxruntime-ios
 ./build-macos/pitchee_cli ./models /path/to/audio.wav feminization
 ./build-macos/pitchee_cli ./models voice-health /path/to/audio.wav
 ./build-macos/pitchee_cli ./models voice-severity /path/to/audio.wav
+./build-macos/pitchee_cli ./models record-severity 8
+./build-macos/pitchee_cli ./models record-severity 8 /tmp/voice.wav
 ```
 
 第三个参数必须显式指定 `feminization` 或 `masculinization`。

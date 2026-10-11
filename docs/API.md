@@ -240,6 +240,12 @@ pitchee_analysis_run_voice_health_v2_wav_file(
 );
 ```
 
+The desktop CLI also supports direct recording followed by v2:
+
+```bash
+./build-macos/pitchee_cli ./models record-severity 8 /tmp/voice.wav
+```
+
 v2 passes the 398 ECAPA/acoustic features through a 384-component
 Nystroem-RBF map and then two Ridge heads:
 

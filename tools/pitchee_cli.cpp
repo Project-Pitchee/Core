@@ -63,23 +63,29 @@ bool json_number(const std::string& json, const std::string& key, double& value)
 
 int main(int argc, char** argv) {
     const bool record_mode = argc >= 5 && std::strcmp(argv[2], "record") == 0;
+    const bool record_severity_mode = (argc == 4 || argc == 5)
+        && std::strcmp(argv[2], "record-severity") == 0;
     const bool voice_health_mode = argc == 4
         && std::strcmp(argv[2], "voice-health") == 0;
     const bool voice_severity_mode = argc == 4
         && std::strcmp(argv[2], "voice-severity") == 0;
-    if ((!record_mode && !voice_health_mode && !voice_severity_mode && argc != 4)
-        || (record_mode && argc != 5 && argc != 6)) {
+    if ((!record_mode && !record_severity_mode && !voice_health_mode
+            && !voice_severity_mode && argc != 4)
+        || (record_mode && argc != 5 && argc != 6)
+        || (record_severity_mode && argc != 4 && argc != 5)) {
         std::cerr << "usage: pitchee_cli <model-directory> <audio.wav> "
                      "<feminization|masculinization>\n"
                      "       pitchee_cli <model-directory> record <seconds> "
                      "<feminization|masculinization> [output.wav]\n"
+                     "       pitchee_cli <model-directory> record-severity <seconds> "
+                     "[output.wav]\n"
                      "       pitchee_cli <model-directory> voice-health <audio.wav>\n"
                      "       pitchee_cli <model-directory> voice-severity <audio.wav>\n";
         return 2;
     }
 
     pitchee_score_profile_t score_profile;
-    if (!voice_health_mode && !voice_severity_mode) {
+    if (!voice_health_mode && !voice_severity_mode && !record_severity_mode) {
         const char* profile_argument = record_mode ? argv[4] : argv[3];
         if (!parse_profile(profile_argument, score_profile)) {
             std::cerr << "invalid score profile: " << profile_argument << "\n";
@@ -87,10 +93,15 @@ int main(int argc, char** argv) {
         }
     }
 
-    std::string audio_path = record_mode || voice_health_mode || voice_severity_mode
-        ? std::string{}
-        : argv[2];
-    if (record_mode) {
+    std::string audio_path;
+    if (record_mode || record_severity_mode) {
+        audio_path.clear();
+    } else if (voice_health_mode || voice_severity_mode) {
+        audio_path = argv[3];
+    } else {
+        audio_path = argv[2];
+    }
+    if (record_mode || record_severity_mode) {
         char* duration_end = nullptr;
         const double duration = std::strtod(argv[3], &duration_end);
         if (duration_end == argv[3] || *duration_end != '\0'
@@ -98,8 +109,10 @@ int main(int argc, char** argv) {
             std::cerr << "recording duration must be between 0 and 60 seconds\n";
             return 2;
         }
-        if (argc == 6) {
+        if (record_mode && argc == 6) {
             audio_path = argv[5];
+        } else if (record_severity_mode && argc == 5) {
+            audio_path = argv[4];
         } else {
             audio_path = (
                 std::filesystem::temp_directory_path()
@@ -192,11 +205,11 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    if (voice_severity_mode) {
+    if (voice_severity_mode || record_severity_mode) {
         pitchee_voice_severity_result_t severity{};
         status = pitchee_analysis_run_voice_health_v2_wav_file(
             analyzer,
-            argv[3],
+            audio_path.c_str(),
             show_progress && *show_progress ? progress_callback : nullptr,
             nullptr,
             &severity,
@@ -207,6 +220,9 @@ int main(int argc, char** argv) {
             std::cerr << "voice-severity analysis failed: " << error << "\n";
             pitchee_analyzer_destroy(analyzer);
             return static_cast<int>(status);
+        }
+        if (record_severity_mode) {
+            std::cout << "recording: " << audio_path << "\n";
         }
         std::cout << "grbas_grade: " << severity.grbas_grade << "\n";
         std::cout << "cape_v_severity: " << severity.cape_v_severity << "\n";
