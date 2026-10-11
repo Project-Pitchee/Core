@@ -321,6 +321,15 @@ double score_probability(
     return 1.0 / (1.0 + std::exp(-raw_score));
 }
 
+double map_disorder_probability(double probability) {
+    constexpr double raw_threshold = kVoiceHealthRawDecisionThreshold;
+    probability = std::max(0.0, std::min(1.0, probability));
+    if (probability <= raw_threshold) {
+        return 0.5 * probability / raw_threshold;
+    }
+    return 0.5 + 0.5 * (probability - raw_threshold) / (1.0 - raw_threshold);
+}
+
 }  // namespace
 
 std::vector<SampleWindow> voice_health_windows(size_t sample_count) {
@@ -422,11 +431,12 @@ VoiceHealthResult analyze_voice_health(
     result.acoustic[12] = median(intensities);
     result.acoustic[13] = percentile(intensities, 0.75) - percentile(intensities, 0.25);
 
-    result.disorder_probability = score_probability(
+    const double raw_disorder_probability = score_probability(
         result.acoustic,
         embeddings,
         result.ecapa_features
     );
+    result.disorder_probability = map_disorder_probability(raw_disorder_probability);
     result.health_score = 100.0 * (1.0 - result.disorder_probability);
     result.disordered = result.disorder_probability >= kVoiceHealthDecisionThreshold;
     return result;

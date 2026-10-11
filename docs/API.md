@@ -224,6 +224,19 @@ reuses the analyzer's VAD, SwiftF0 and ECAPA models, then applies the embedded
 Logistic head from `voice_health_model.hpp`. No extra model file is needed.
 Android uses the same ncnn-backed VAD, SwiftF0 and ECAPA path.
 
+The discriminant trained by the offline experiment was `0.4135834447`. Core
+applies a monotonic piecewise-linear mapping with fixed endpoints:
+
+```text
+raw 0.0    -> mapped 0.0
+raw 0.4136 -> mapped 0.5
+raw 1.0    -> mapped 1.0
+```
+
+The reported `disorder_probability`, `health_score` and
+`decision_threshold` all use the mapped probability space. Therefore a
+`decision_threshold` of `0.5` is the actual deployment boundary.
+
 ## Spectrum
 
 Spectrum is independent of analyzer creation and ONNX Runtime:

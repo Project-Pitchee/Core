@@ -187,8 +187,10 @@ pitchee_analysis_run_voice_health_wav_file(
 ```
 
 该接口复用 Analyzer 的 VAD、SwiftF0 和 ECAPA。模型头权重直接编译进
-`voice_health_model.hpp`，不增加模型文件。Android 上 VAD、SwiftF0 和 ECAPA
-仍走既有 ncnn 后端，因此不需要额外 ncnn 转换步骤。
+`voice_health_model.hpp`，不增加模型文件。Core 将训练得到的原始阈值
+`0.4135834447` 做单调分段线性校准，使其映射到 `0.50`；因此对外
+`decision_threshold`、健康分边界均为 50。Android 上 VAD、SwiftF0 和
+ECAPA 仍走既有 ncnn 后端，因此不需要额外 ncnn 转换步骤。
 
 macOS 也可以直接从命令行录音并分析。录音使用系统当前的默认输入设备，可在
 “系统设置 → 声音 → 输入”中切换：
