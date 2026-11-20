@@ -1,0 +1,16 @@
+.DS_Store
+build*/
+.cache/
+compile_commands.json
+*.dylib
+*.so
+*.dll
+*.lib
+*.a
+*.pdb
+platform/android/benchmark/.gradle/
+platform/android/benchmark/.idea/
+platform/android/benchmark/local.properties
+platform/android/benchmark/app/.cxx/
+platform/android/benchmark/app/src/main/assets/models/
+platform/android/benchmark/app/src/main/jniLibs/arm64-v8a/libonnxruntime.so

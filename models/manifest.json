@@ -1,0 +1,16 @@
+{
+  "modelVersion": "2026-11-v0-onnx-hqq4",
+  "v0": {
+    "modelVersion": "v0-wavlm-large-l12-hqq4-b128",
+    "modelFile": "wavlm-large-l12-hqq4-b128-convw8.onnx",
+    "modelSha256": "54f1499a09d88e585c0bebe02e049be46d4bc3bcc15afa42d6aec981ecbb81a9",
+    "headSha256": "8688dabfe25fd2fb93fbcd9e0c65507ef9b3be0ca58a1cfef2f6c3da8c1109fd",
+    "sampleRate": 16000,
+    "windowSeconds": 12,
+    "classes": ["male_natural", "male_unnatural", "female_natural"],
+    "temperature": 1.2381970150963135
+  },
+  "files": {
+    "wavlm-large-l12-hqq4-b128-convw8.onnx": "54f1499a09d88e585c0bebe02e049be46d4bc3bcc15afa42d6aec981ecbb81a9"
+  }
+}

@@ -1,0 +1,36 @@
+@PACKAGE_INIT@
+
+if(NOT "@PITCHEE_BUILD_SHARED@" AND "@PITCHEE_ENABLE_ORT@")
+    if(NOT TARGET pitchee_onnxruntime)
+        set(PITCHEE_ORT_ROOT "" CACHE PATH "ONNX Runtime root directory")
+        find_path(PITCHEE_ORT_INCLUDE onnxruntime_cxx_api.h
+            HINTS
+                "${PITCHEE_ORT_ROOT}/include"
+                "$ENV{ONNXRUNTIME_ROOT}/include"
+        )
+        find_library(PITCHEE_ORT_LIBRARY
+            NAMES onnxruntime
+            HINTS
+                "${PITCHEE_ORT_ROOT}/lib"
+                "${PITCHEE_ORT_ROOT}/lib64"
+                "${PITCHEE_ORT_ROOT}/bin"
+                "$ENV{ONNXRUNTIME_ROOT}/lib"
+                "$ENV{ONNXRUNTIME_ROOT}/lib64"
+        )
+        if(NOT PITCHEE_ORT_INCLUDE OR NOT PITCHEE_ORT_LIBRARY)
+            set(PitcheeCore_FOUND FALSE)
+            set(PitcheeCore_NOT_FOUND_MESSAGE
+                "ONNX Runtime is required for static PitcheeCore. Set PITCHEE_ORT_ROOT or PITCHEE_ORT_LIBRARY.")
+            return()
+        endif()
+        add_library(pitchee_onnxruntime UNKNOWN IMPORTED)
+        set_target_properties(pitchee_onnxruntime PROPERTIES
+            IMPORTED_LOCATION "${PITCHEE_ORT_LIBRARY}"
+            INTERFACE_INCLUDE_DIRECTORIES "${PITCHEE_ORT_INCLUDE}"
+        )
+    endif()
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/PitcheeCoreTargets.cmake")
+
+check_required_components(PitcheeCore)
